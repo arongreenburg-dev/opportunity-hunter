@@ -1,0 +1,55 @@
+{
+  "profile_name": "User 1",
+  "goals": [
+    "Advance career through high-value opportunities",
+    "Build practical AI and agent-building capability",
+    "Develop entrepreneurial opportunities and intellectual property",
+    "Create meaningful financial, learning, credibility, and network value"
+  ],
+  "capabilities": [
+    "Healthcare transformation and operations",
+    "Strategy and systems design",
+    "Executive communication",
+    "Product thinking",
+    "Decision frameworks",
+    "AI prompting and AI-assisted prototyping",
+    "Cross-functional leadership"
+  ],
+  "interests": [
+    "Artificial intelligence",
+    "Healthcare",
+    "Innovation",
+    "Entrepreneurship",
+    "Education",
+    "Operational transformation"
+  ],
+  "constraints": {
+    "time": "Limited discretionary time outside full-time work and family commitments",
+    "technical": "Not a traditional software developer; capable of AI-assisted prototyping and following technical implementation instructions",
+    "travel": "Prefer limited travel",
+    "effort_preference": "Prioritize opportunities with strong expected value relative to effort"
+  },
+  "current_assets": [
+    "Professional healthcare transformation experience",
+    "Executive and operational domain expertise",
+    "Existing AI product concepts",
+    "Working Opportunity Hunter ADK prototype",
+    "Google Cloud and Gemini agent-development environment already configured"
+  ],
+  "opportunity_preferences": [
+    "Hackathons and competitions",
+    "Career opportunities",
+    "Consulting and advisory work",
+    "Speaking opportunities",
+    "Grants and funding",
+    "Accelerators and fellowships",
+    "Partnerships",
+    "Board and teaching opportunities",
+    "Calls for pilots and innovation"
+  ],
+  "minimum_thresholds": {
+    "pursue_score": 80,
+    "consider_score": 65,
+    "preference": "Favor opportunities with meaningful strategic, financial, career, entrepreneurial, learning, or credibility upside"
+  }
+}
