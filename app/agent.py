@@ -6,10 +6,19 @@
 from google.adk.agents import Agent
 from google.adk.apps import App
 from google.adk.models import Gemini
+from google.adk.tools import google_search
+from google.adk.tools.agent_tool import AgentTool
 from google.genai import types
+import json
+from pathlib import Path
 
 
 MODEL = "gemini-3.6-flash"
+
+
+PROFILE_PATH = Path(__file__).resolve().parent.parent / "data" / "user_profile.json"
+USER_PROFILE = json.loads(PROFILE_PATH.read_text())
+USER_PROFILE_JSON = json.dumps(USER_PROFILE, indent=2)
 
 
 def calculate_opportunity_score(
@@ -72,15 +81,66 @@ def calculate_opportunity_score(
     }
 
 
+
+scout_agent = Agent(
+    name="scout_agent",
+    model=Gemini(
+        model=MODEL,
+        retry_options=types.HttpRetryOptions(attempts=3),
+    ),
+    description="Searches the live web for relevant opportunities.",
+    instruction="""
+You are the Scout for Opportunity Hunter.
+
+When asked to discover opportunities, use Google Search to find real,
+current candidates that match the request.
+
+Prioritize primary or authoritative sources when possible.
+
+For each candidate return:
+- title
+- organization
+- opportunity type
+- short description
+- eligibility if known
+- deadline if known
+- location / remote status if known
+- financial or other upside if known
+- estimated requirements or effort if known
+- source URL
+- important uncertainties
+
+Do not invent missing facts. Clearly mark unknown information.
+Return a concise candidate list for the parent Opportunity Hunter agent
+to evaluate and rank.
+""",
+    tools=[google_search],
+)
+
+scout_tool = AgentTool(
+    agent=scout_agent,
+    propagate_grounding_metadata=True,
+)
+
+
 root_agent = Agent(
     name="opportunity_hunter",
     model=Gemini(
         model=MODEL,
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
-    instruction="""
+    instruction=f"""
 You are Opportunity Hunter, an AI decision agent that helps users decide
 which opportunities are worth pursuing.
+
+
+PERSISTENT USER PROFILE:
+The following stored profile is the authoritative baseline for this user.
+Use it automatically when discovering, evaluating, and ranking opportunities.
+Do not require the user to restate this information.
+Do not invent capabilities that contradict this profile.
+
+{USER_PROFILE_JSON}
 
 You evaluate opportunities such as:
 - hackathons and competitions
@@ -95,6 +155,13 @@ You evaluate opportunities such as:
 
 Your job is not merely to describe an opportunity. Your job is to make
 a decision recommendation.
+
+DISCOVERY MODE:
+If the user asks you to find, discover, search for, or identify opportunities,
+call scout_agent to search the live web. Review the returned candidates and
+use the available evidence to identify the strongest matches. When appropriate,
+evaluate promising candidates using calculate_opportunity_score. Preserve
+source URLs and distinguish sourced facts from assumptions.
 
 For every opportunity, assess:
 
@@ -153,7 +220,7 @@ Only include information that could materially change the recommendation.
 
 Prioritize decision usefulness over generic encouragement.
 """,
-    tools=[calculate_opportunity_score],
+    tools=[calculate_opportunity_score, scout_tool],
 )
 
 
