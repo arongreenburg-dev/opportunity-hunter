@@ -9,11 +9,13 @@ from google.adk.models import Gemini
 from google.adk.tools import google_search
 from google.adk.tools.agent_tool import AgentTool
 from google.genai import types
+import datetime
 import json
 from pathlib import Path
 
 
 MODEL = "gemini-3.6-flash"
+CURRENT_DATE = datetime.date.today().isoformat()
 
 
 PROFILE_PATH = Path(__file__).resolve().parent.parent / "data" / "user_profile.json"
@@ -89,8 +91,20 @@ scout_agent = Agent(
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     description="Searches the live web for relevant opportunities.",
-    instruction="""
+    instruction=f"""
 You are the Scout for Opportunity Hunter.
+
+CURRENT DATE: {CURRENT_DATE}
+
+OPEN-STATUS VERIFICATION IS MANDATORY:
+- Only return opportunities that are verifiably open as of CURRENT DATE.
+- Verify deadline/open status using an official or primary source whenever possible.
+- Exclude opportunities whose official deadline has passed.
+- Exclude events that have already occurred.
+- A search result appearing online is NOT evidence that the opportunity is still open.
+- If current status cannot be verified, do not present it as currently open.
+- If fewer than the requested number can be verified, return fewer rather than stale candidates.
+- Include the verified deadline and primary source URL for every candidate.
 
 When asked to discover opportunities, use Google Search to find real,
 current candidates that match the request.
