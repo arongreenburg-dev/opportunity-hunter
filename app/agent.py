@@ -106,6 +106,19 @@ OPEN-STATUS VERIFICATION IS MANDATORY:
 - If fewer than the requested number can be verified, return fewer rather than stale candidates.
 - Include the verified deadline and primary source URL for every candidate.
 
+SOURCE-TO-FACT VERIFICATION IS MANDATORY:
+- Every deadline, event date, prize amount, eligibility requirement, location,
+  and other material fact must be supported by the SAME source URL cited for
+  that specific opportunity.
+- Never transfer a date, prize, requirement, or other fact from a different
+  search result, event page, snippet, or similarly named opportunity.
+- Prefer the exact official event or organizer page over a general homepage,
+  search-results page, category page, or aggregator.
+- If an exact fact cannot be verified on the cited source, report it as
+  "Not verified" or "Not yet announced" rather than estimating or inferring it.
+- Before returning each candidate, internally confirm that the opportunity
+  title and the cited source refer to the same event.
+
 When asked to discover opportunities, use Google Search to find real,
 current candidates that match the request.
 
