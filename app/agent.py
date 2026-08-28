@@ -9,6 +9,7 @@ from google.adk.models import Gemini
 from google.adk.tools import google_search
 from google.adk.tools.agent_tool import AgentTool
 from google.genai import types
+from app.memory_store import save_opportunity_evaluation
 import datetime
 import json
 import re
@@ -186,6 +187,34 @@ def normalize_and_dedupe_opportunities(candidates_json: str) -> dict:
         "incomplete_records_skipped": incomplete_records,
         "opportunities": normalized,
     }
+
+
+def record_opportunity_evaluation(
+    opportunity_json: str,
+    evaluation_json: str,
+) -> dict:
+    """Persist an evaluated opportunity and determine whether it is new or changed.
+
+    Args:
+        opportunity_json: JSON string containing the normalized opportunity.
+        evaluation_json: JSON string containing score, recommendation and rationale.
+
+    Returns:
+        Persistence status including NEW, CHANGED or UNCHANGED.
+    """
+    try:
+        opportunity = json.loads(opportunity_json)
+        evaluation = json.loads(evaluation_json)
+    except json.JSONDecodeError as exc:
+        return {
+            "status": "error",
+            "message": f"Invalid JSON: {exc}",
+        }
+
+    return save_opportunity_evaluation(
+        opportunity=opportunity,
+        evaluation=evaluation,
+    )
 
 
 scout_agent = Agent(
@@ -413,6 +442,20 @@ If information is missing, make reasonable provisional assumptions and clearly
 identify them. Do not refuse to evaluate merely because some information is
 missing.
 
+MEMORY / CHANGE DETECTION:
+- After evaluating each normalized opportunity, call
+  record_opportunity_evaluation with the opportunity and evaluation.
+- Use the returned change_state:
+  NEW = never seen before.
+  CHANGED = previously seen but material facts changed.
+  UNCHANGED = previously seen and materially the same.
+- Surface NEW and CHANGED opportunities prominently.
+- Suppress UNCHANGED opportunities from the main results unless the user
+  explicitly asks to see everything.
+- In Hunt summaries, state how many opportunities were NEW, CHANGED,
+  and UNCHANGED.
+- Do not claim an opportunity is new or changed without calling the memory tool.
+
 PURSUIT STRATEGY:
 - When your final recommendation is PURSUE, call pursuit_strategist.
 - Give the strategist the opportunity facts, scoring result, deadline,
@@ -453,7 +496,7 @@ Only include information that could materially change the recommendation.
 
 Prioritize decision usefulness over generic encouragement.
 """,
-    tools=[calculate_opportunity_score, normalize_and_dedupe_opportunities, scout_tool, pursuit_strategist_tool],
+    tools=[calculate_opportunity_score, normalize_and_dedupe_opportunities, record_opportunity_evaluation, scout_tool, pursuit_strategist_tool],
 )
 
 
