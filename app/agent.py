@@ -11,6 +11,7 @@ from google.adk.tools.agent_tool import AgentTool
 from google.genai import types
 import datetime
 import json
+import re
 from pathlib import Path
 
 
@@ -82,6 +83,109 @@ def calculate_opportunity_score(
         },
     }
 
+
+
+def normalize_and_dedupe_opportunities(candidates_json: str) -> dict:
+    """Normalize Scout candidates into a consistent structure and remove duplicates.
+
+    Args:
+        candidates_json: JSON string containing a list of candidate opportunity objects.
+
+    Returns:
+        Normalized candidate list plus duplicate/incomplete-record counts.
+    """
+    try:
+        candidates = json.loads(candidates_json)
+    except json.JSONDecodeError as exc:
+        return {
+            "status": "error",
+            "message": f"Invalid JSON: {exc}",
+            "opportunities": [],
+        }
+
+    if not isinstance(candidates, list):
+        return {
+            "status": "error",
+            "message": "Input must be a JSON list of opportunities.",
+            "opportunities": [],
+        }
+
+    def clean(value):
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return re.sub(r"\s+", " ", value).strip()
+        return value
+
+    def canonical(value):
+        return re.sub(r"[^a-z0-9]+", "", clean(value).lower())
+
+    normalized = []
+    seen = set()
+    duplicates_removed = 0
+    incomplete_records = 0
+
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            incomplete_records += 1
+            continue
+
+        item = {
+            "title": clean(candidate.get("title", "")),
+            "organization": clean(candidate.get("organization", "")),
+            "opportunity_type": clean(candidate.get("opportunity_type", "")),
+            "description": clean(candidate.get("description", "")),
+            "eligibility": clean(candidate.get("eligibility", "")),
+            "deadline": clean(candidate.get("deadline", "")),
+            "location": clean(candidate.get("location", "")),
+            "remote_option": clean(candidate.get("remote_option", "")),
+            "financial_upside": clean(candidate.get("financial_upside", "")),
+            "career_upside": clean(candidate.get("career_upside", "")),
+            "learning_upside": clean(candidate.get("learning_upside", "")),
+            "credibility_upside": clean(candidate.get("credibility_upside", "")),
+            "network_upside": clean(candidate.get("network_upside", "")),
+            "estimated_time_commitment": clean(
+                candidate.get("estimated_time_commitment", "")
+            ),
+            "requirements": candidate.get("requirements", []) or [],
+            "source_url": clean(candidate.get("source_url", "")),
+            "current_status": clean(candidate.get("current_status", "")),
+            "known_uncertainties": candidate.get("known_uncertainties", []) or [],
+            "notes": clean(candidate.get("notes", "")),
+        }
+
+        # A usable opportunity must at minimum have a title.
+        if not item["title"]:
+            incomplete_records += 1
+            continue
+
+        # Prefer source URL as identity. Fall back to title + organization.
+        if item["source_url"]:
+            identity = "url:" + item["source_url"].split("?")[0].rstrip("/").lower()
+        else:
+            identity = (
+                "name:"
+                + canonical(item["title"])
+                + "|"
+                + canonical(item["organization"])
+            )
+
+        if identity in seen:
+            duplicates_removed += 1
+            continue
+
+        seen.add(identity)
+        item["candidate_id"] = identity
+        normalized.append(item)
+
+    return {
+        "status": "ok",
+        "input_count": len(candidates),
+        "output_count": len(normalized),
+        "duplicates_removed": duplicates_removed,
+        "incomplete_records_skipped": incomplete_records,
+        "opportunities": normalized,
+    }
 
 
 scout_agent = Agent(
@@ -183,12 +287,23 @@ You evaluate opportunities such as:
 Your job is not merely to describe an opportunity. Your job is to make
 a decision recommendation.
 
+RESULT COUNT AND SOURCE DISCIPLINE:
+- If the user requests N opportunities, return no more than N final candidates.
+- Preserve the exact primary source URL for every ranked opportunity.
+- Every ranked opportunity must include:
+  title, organization, verified deadline/status, source URL, score, and recommendation.
+- Do not omit the source URL from summary tables or ranked lists.
+- If more candidates are discovered than requested, evaluate them internally if useful
+  but only return the requested number of final results.
+
 DISCOVERY MODE:
-If the user asks you to find, discover, search for, or identify opportunities,
-call scout_agent to search the live web. Review the returned candidates and
-use the available evidence to identify the strongest matches. When appropriate,
-evaluate promising candidates using calculate_opportunity_score. Preserve
-source URLs and distinguish sourced facts from assumptions.
+When discovering multiple opportunities, follow this sequence:
+1. Call scout_agent to discover candidates.
+2. Convert the Scout candidates into JSON and call
+   normalize_and_dedupe_opportunities BEFORE evaluating them.
+3. Use only the normalized, deduplicated candidates for scoring and ranking.
+4. Evaluate each viable candidate against the persistent user profile.
+5. Rank the candidates and explain the strongest recommendation.
 
 For every opportunity, assess:
 
@@ -247,7 +362,7 @@ Only include information that could materially change the recommendation.
 
 Prioritize decision usefulness over generic encouragement.
 """,
-    tools=[calculate_opportunity_score, scout_tool],
+    tools=[calculate_opportunity_score, normalize_and_dedupe_opportunities, scout_tool],
 )
 
 
