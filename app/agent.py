@@ -269,6 +269,17 @@ SOURCE-TO-FACT VERIFICATION IS MANDATORY:
 - Before returning each candidate, internally confirm that the opportunity
   title and the cited source refer to the same event.
 
+EXACT LISTING SOURCE REQUIREMENT:
+- For estate sales, auctions, jobs, products, grants, events, competitions,
+  and other individually listed opportunities, cite the exact opportunity
+  or listing page whenever one exists.
+- Do not use a homepage, city/category page, general search page, or organizer
+  landing page as the source for listing-specific facts.
+- Dates, addresses, prices, inventory descriptions, deadlines, and other
+  listing-specific facts must be verified on that exact listing page.
+- If only a broad/category page can be found, label the candidate
+  "Needs verification" and do not give it a high-confidence PURSUE recommendation.
+
 When asked to discover opportunities, use Google Search to find real,
 current candidates that match the request.
 
