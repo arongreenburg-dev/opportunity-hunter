@@ -9,7 +9,7 @@ from google.adk.models import Gemini
 from google.adk.tools import google_search
 from google.adk.tools.agent_tool import AgentTool
 from google.genai import types
-from app.memory_store import save_opportunity_evaluation
+from app.memory_store import save_opportunity_evaluation, get_hunt, list_hunts
 import datetime
 import json
 import re
@@ -187,6 +187,23 @@ def normalize_and_dedupe_opportunities(candidates_json: str) -> dict:
         "incomplete_records_skipped": incomplete_records,
         "opportunities": normalized,
     }
+
+
+def load_saved_hunt(hunt_id: str) -> dict:
+    """Load a saved Hunt configuration from Firestore.
+
+    Args:
+        hunt_id: Stable ID of the saved Hunt.
+
+    Returns:
+        The Hunt configuration or not-found status.
+    """
+    return get_hunt(hunt_id)
+
+
+def get_saved_hunts() -> dict:
+    """Return all saved Hunts available to Opportunity Hunter."""
+    return list_hunts()
 
 
 def record_opportunity_evaluation(
@@ -442,6 +459,14 @@ If information is missing, make reasonable provisional assumptions and clearly
 identify them. Do not refuse to evaluate merely because some information is
 missing.
 
+SAVED HUNTS:
+- The user may ask to run a previously saved Hunt by name or ID.
+- Use get_saved_hunts when needed to identify available Hunts.
+- Use load_saved_hunt to retrieve the selected Hunt configuration.
+- Follow the saved search query, keywords, geography, radius, exclusions,
+  result limit, and other Hunt constraints during discovery.
+- A saved Hunt is the authoritative definition of what the user wants monitored.
+
 MEMORY / CHANGE DETECTION:
 - After evaluating each normalized opportunity, call
   record_opportunity_evaluation with the opportunity and evaluation.
@@ -496,7 +521,7 @@ Only include information that could materially change the recommendation.
 
 Prioritize decision usefulness over generic encouragement.
 """,
-    tools=[calculate_opportunity_score, normalize_and_dedupe_opportunities, record_opportunity_evaluation, scout_tool, pursuit_strategist_tool],
+    tools=[calculate_opportunity_score, normalize_and_dedupe_opportunities, record_opportunity_evaluation, load_saved_hunt, get_saved_hunts, scout_tool, pursuit_strategist_tool],
 )
 
 
