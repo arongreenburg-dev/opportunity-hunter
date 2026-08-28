@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+import hashlib
+import json
 
 from google.cloud import firestore
 
@@ -44,4 +46,105 @@ def get_profile(profile_id: str) -> dict:
     return {
         "status": "found",
         "profile": data,
+    }
+
+
+def _opportunity_doc_id(candidate_id: str) -> str:
+    """Create a Firestore-safe stable ID from the normalized candidate ID."""
+    return hashlib.sha256(candidate_id.encode("utf-8")).hexdigest()[:24]
+
+
+def _opportunity_fingerprint(opportunity: dict) -> str:
+    """Fingerprint only fields whose changes may matter to the user."""
+    material_fields = {
+        "title": opportunity.get("title", ""),
+        "organization": opportunity.get("organization", ""),
+        "deadline": opportunity.get("deadline", ""),
+        "eligibility": opportunity.get("eligibility", ""),
+        "location": opportunity.get("location", ""),
+        "remote_option": opportunity.get("remote_option", ""),
+        "financial_upside": opportunity.get("financial_upside", ""),
+        "estimated_time_commitment": opportunity.get(
+            "estimated_time_commitment", ""
+        ),
+        "requirements": opportunity.get("requirements", []),
+        "current_status": opportunity.get("current_status", ""),
+        "source_url": opportunity.get("source_url", ""),
+    }
+
+    canonical = json.dumps(
+        material_fields,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def save_opportunity_evaluation(
+    opportunity: dict,
+    evaluation: dict,
+) -> dict:
+    """Persist an opportunity/evaluation and identify NEW/CHANGED/UNCHANGED state."""
+
+    candidate_id = opportunity.get("candidate_id")
+
+    if not candidate_id:
+        return {
+            "status": "error",
+            "message": "candidate_id is required",
+        }
+
+    db = get_db()
+
+    now = datetime.now(timezone.utc)
+    doc_id = _opportunity_doc_id(candidate_id)
+    fingerprint = _opportunity_fingerprint(opportunity)
+
+    opportunity_ref = db.collection("opportunities").document(doc_id)
+    existing_snapshot = opportunity_ref.get()
+
+    if not existing_snapshot.exists:
+        change_state = "NEW"
+        first_seen = now
+        previous_fingerprint = None
+    else:
+        existing = existing_snapshot.to_dict()
+        previous_fingerprint = existing.get("fingerprint")
+        first_seen = existing.get("first_seen", now)
+
+        if previous_fingerprint == fingerprint:
+            change_state = "UNCHANGED"
+        else:
+            change_state = "CHANGED"
+
+    record = {
+        **opportunity,
+        "candidate_id": candidate_id,
+        "fingerprint": fingerprint,
+        "first_seen": first_seen,
+        "last_seen": now,
+        "change_state": change_state,
+    }
+
+    opportunity_ref.set(record)
+
+    evaluation_record = {
+        **evaluation,
+        "candidate_id": candidate_id,
+        "opportunity_doc_id": doc_id,
+        "change_state": change_state,
+        "evaluated_at": now,
+    }
+
+    db.collection("evaluations").add(evaluation_record)
+
+    return {
+        "status": "saved",
+        "change_state": change_state,
+        "candidate_id": candidate_id,
+        "document_id": doc_id,
+        "previous_fingerprint": previous_fingerprint,
+        "fingerprint": fingerprint,
     }
