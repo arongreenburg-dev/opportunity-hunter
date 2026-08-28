@@ -1,0 +1,22 @@
+{
+  "profiles": {
+    "purpose": "Who the user is, goals, capabilities, interests, constraints and preferences",
+    "document_key": "profile_id"
+  },
+  "hunts": {
+    "purpose": "Saved searches such as AI hackathons, healthcare jobs or baseball-card estate sales",
+    "document_key": "hunt_id"
+  },
+  "opportunities": {
+    "purpose": "Normalized opportunities discovered by Scout",
+    "document_key": "candidate_id"
+  },
+  "evaluations": {
+    "purpose": "Score, recommendation, rationale and evaluation timestamp",
+    "document_key": "evaluation_id"
+  },
+  "runs": {
+    "purpose": "History of each Hunt execution including new, changed and unchanged counts",
+    "document_key": "run_id"
+  }
+}
