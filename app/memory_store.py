@@ -148,3 +148,59 @@ def save_opportunity_evaluation(
         "previous_fingerprint": previous_fingerprint,
         "fingerprint": fingerprint,
     }
+
+
+def save_hunt(hunt_id: str, hunt: dict) -> dict:
+    """Create or update a saved Opportunity Hunter Hunt."""
+    db = get_db()
+    now = datetime.now(timezone.utc)
+
+    ref = db.collection("hunts").document(hunt_id)
+    existing = ref.get()
+
+    record = {
+        **hunt,
+        "hunt_id": hunt_id,
+        "updated_at": now,
+    }
+
+    if existing.exists:
+        record["created_at"] = existing.to_dict().get("created_at", now)
+    else:
+        record["created_at"] = now
+
+    ref.set(record)
+
+    return {
+        "status": "saved",
+        "hunt_id": hunt_id,
+    }
+
+
+def get_hunt(hunt_id: str) -> dict:
+    """Retrieve one saved Hunt."""
+    db = get_db()
+    snapshot = db.collection("hunts").document(hunt_id).get()
+
+    if not snapshot.exists:
+        return {
+            "status": "not_found",
+            "hunt_id": hunt_id,
+        }
+
+    return {
+        "status": "found",
+        "hunt": snapshot.to_dict(),
+    }
+
+
+def list_hunts() -> dict:
+    """Return all saved Hunts."""
+    db = get_db()
+    hunts = [doc.to_dict() for doc in db.collection("hunts").stream()]
+
+    return {
+        "status": "ok",
+        "count": len(hunts),
+        "hunts": hunts,
+    }

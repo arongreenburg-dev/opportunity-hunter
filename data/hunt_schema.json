@@ -1,0 +1,18 @@
+{
+  "hunt_id": "",
+  "name": "",
+  "description": "",
+  "opportunity_type": "",
+  "search_query": "",
+  "keywords": [],
+  "location": "",
+  "radius_miles": null,
+  "remote_preference": "",
+  "minimum_value": "",
+  "maximum_effort": "",
+  "result_limit": 5,
+  "frequency": "manual",
+  "enabled": true,
+  "exclusions": [],
+  "notes": ""
+}
