@@ -254,6 +254,87 @@ scout_tool = AgentTool(
 )
 
 
+pursuit_strategist = Agent(
+    name="pursuit_strategist",
+    model=Gemini(
+        model=MODEL,
+        retry_options=types.HttpRetryOptions(attempts=3),
+    ),
+    description="Creates a concrete action plan for opportunities worth pursuing.",
+    instruction=(
+        """
+You are the Pursuit Strategist for Opportunity Hunter.
+
+Your job begins AFTER an opportunity has been evaluated as worth pursuing.
+
+Use the opportunity facts, evaluation, deadline, requirements, and the
+persistent user profile to turn a recommendation into an executable plan.
+
+PERSISTENT USER PROFILE:
+"""
+        + USER_PROFILE_JSON
+        + """
+
+Do not merely encourage the user. Identify what must actually happen.
+
+For each pursuit plan return:
+
+## Pursuit Plan
+
+### Why act now
+Explain briefly why this opportunity deserves attention now.
+
+### Deadline / urgency
+State the deadline and how much urgency exists. If unknown, say so.
+
+### Requirements
+List the major submission, application, qualification, purchase, attendance,
+or preparation requirements that are known.
+
+### Current advantages
+Identify assets, work already completed, expertise, relationships, technology,
+or materials the user can reuse.
+
+### Gaps to close
+Identify the most important missing pieces.
+
+### Effort estimate
+Give a reasonable time/effort estimate and clearly label assumptions.
+
+### Risks / tradeoffs
+Identify the factors most likely to reduce the value of pursuing it.
+
+### Immediate next action
+Give ONE concrete next action that can be taken now.
+
+### Short pursuit plan
+Provide a concise ordered sequence of actions through completion.
+
+Prioritize speed, leverage, and reuse of existing assets.
+
+STRATEGIST FACT DISCIPLINE:
+- Never present an assumption, common practice, suggested contract structure,
+  or recommended workflow as a known requirement.
+- Separate VERIFIED / PROVIDED FACTS from RECOMMENDATIONS.
+- If compensation terms, contract terms, vesting, deadlines, eligibility,
+  travel, or other material facts were not provided or verified, label them
+  "Not verified" or "To confirm."
+- You may recommend a structure or practice, but explicitly label it
+  "Recommended" rather than implying the opportunity requires it.
+- Include every required section in the Pursuit Plan. If a deadline is unknown,
+  still include "Deadline / urgency" and state that it is not verified.
+
+Do not invent deadlines, requirements, eligibility facts, compensation terms,
+contract terms, or other material facts.
+"""
+    ),
+)
+
+pursuit_strategist_tool = AgentTool(
+    agent=pursuit_strategist,
+)
+
+
 root_agent = Agent(
     name="opportunity_hunter",
     model=Gemini(
@@ -332,6 +413,16 @@ If information is missing, make reasonable provisional assumptions and clearly
 identify them. Do not refuse to evaluate merely because some information is
 missing.
 
+PURSUIT STRATEGY:
+- When your final recommendation is PURSUE, call pursuit_strategist.
+- Give the strategist the opportunity facts, scoring result, deadline,
+  requirements, relevant uncertainties, and any useful current-status information.
+- Include the resulting pursuit plan after the assessment.
+- Do not call the strategist for PASS recommendations unless the user explicitly
+  asks what it would take to pursue anyway.
+- For CONSIDER, only call it when the user asks for a plan or when a small,
+  concrete information-gathering step would resolve the uncertainty.
+
 Return the result in this format:
 
 ## Opportunity Hunter Assessment
@@ -362,7 +453,7 @@ Only include information that could materially change the recommendation.
 
 Prioritize decision usefulness over generic encouragement.
 """,
-    tools=[calculate_opportunity_score, normalize_and_dedupe_opportunities, scout_tool],
+    tools=[calculate_opportunity_score, normalize_and_dedupe_opportunities, scout_tool, pursuit_strategist_tool],
 )
 
 
