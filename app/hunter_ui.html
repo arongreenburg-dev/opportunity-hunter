@@ -1,15 +1,295 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Opportunity Hunter</title>
-<style>body{font-family:Arial,sans-serif;margin:0;background:#f6f8fc;color:#172033}header{background:#0b57d0;color:#fff;padding:28px}main{max-width:950px;margin:20px auto;padding:0 16px}.grid{display:grid;grid-template-columns:1fr 1.4fr;gap:16px}.card{background:#fff;border:1px solid #e1e6ef;border-radius:14px;padding:18px;margin-bottom:16px}.chip{display:inline-block;background:#eef4ff;color:#174ea6;padding:6px 9px;border-radius:20px;margin:3px;font-size:13px}.hunt{border:1px solid #dfe5ee;border-radius:10px;padding:12px;margin:10px 0}.muted{color:#667085;font-size:14px}button{background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:9px 13px;font-weight:bold;cursor:pointer}button:disabled{opacity:.5}pre{white-space:pre-wrap;background:#fbfcfe;border:1px solid #e3e7ef;border-radius:10px;padding:14px;min-height:150px;max-height:500px;overflow:auto;font-family:Arial,sans-serif;line-height:1.45}@media(max-width:700px){.grid{grid-template-columns:1fr}}</style></head>
-<body><header><h1>Opportunity Hunter</h1><p>Find it. Evaluate it. Go after what matters.</p></header><main>
-<div class="grid"><section class="card"><h2>About Me</h2><strong>User 1</strong><p class="muted">A persistent profile personalizes discovery and scoring.</p><span class="chip">Healthcare transformation</span><span class="chip">AI & agents</span><span class="chip">Strategy</span><span class="chip">Entrepreneurship</span><span class="chip">Limited travel</span></section>
-<section class="card"><h2>Saved Hunts</h2>
-<div class="hunt"><strong>AI Competitions</strong><div class="muted">Weekly · Remote · AI, agents, hackathons</div><p><button onclick="runHunt('AI Competitions')">Run Hunt</button></p></div>
-<div class="hunt"><strong>Sports Card Estate Sales</strong><div class="muted">Weekly » Northbrook, IL » within 25 miles</div><p><button onclick="runHunt('Sports Card Estate Sales')">Run Hunt</button></p></div>
+<style>body{font-family:Arial,sans-serif;margin:0;background:#f6f8fc;color:#172033}header{background:#0b57d0;color:#fff;padding:28px}main{max-width:950px;margin:20px auto;padding:0 16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.card{background:#fff;border:1px solid #e1e6ef;border-radius:14px;padding:18px;margin-bottom:16px}.chip{display:inline-block;background:#eef4ff;color:#174ea6;padding:6px 9px;border-radius:20px;margin:3px;font-size:13px}.hunt{border:1px solid #dfe5ee;border-radius:10px;padding:12px;margin:10px 0}.muted{color:#667085;font-size:14px}button{background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:9px 13px;font-weight:bold;cursor:pointer}button:disabled{opacity:.5}pre{white-space:pre-wrap;background:#fbfcfe;border:1px solid #e3e7ef;border-radius:10px;padding:14px;min-height:150px;max-height:500px;overflow:auto;font-family:Arial,sans-serif;line-height:1.45}@media(max-width:700px){.grid{grid-template-columns:1fr}}
+textarea{width:100%;min-height:105px;border:1px solid #cfd7e3;border-radius:10px;padding:12px;font:inherit;resize:vertical}
+.examples{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0 16px}
+.example{background:#f3f6fb;border:1px solid #dfe5ee;border-radius:20px;padding:7px 10px;font-size:13px;cursor:pointer}
+.steps{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:16px;font-size:13px}
+.step{background:#eef4ff;color:#174ea6;border-radius:20px;padding:6px 9px}
+.profile-hints{margin:10px 0}
+.hero{padding:22px}
+
+.results-summary{margin:14px 0}
+.results-meta{font-weight:700;margin-bottom:10px}
+.results-table{width:100%;border-collapse:collapse;background:#fff;font-size:14px}
+.results-table th,.results-table td{border-bottom:1px solid #e4e8ef;padding:10px 8px;text-align:left;vertical-align:top}
+.results-table th{background:#f5f7fb;color:#344054}
+.results-table tr:hover{background:#fafbfc}
+.result-actions{display:flex;gap:8px;margin:12px 0}
+.secondary{background:#fff;color:#0b57d0;border:1px solid #0b57d0}
+details{margin-top:14px}
+summary{cursor:pointer;font-weight:700;color:#344054}
+</style></head>
+
+
+<body><header>
+<h1>Opportunity Hunter</h1>
+<p>Your personal agent for finding, evaluating and tracking opportunities that matter to you.</p>
+</header><main>
+
+<section class="card hero">
+<h2>What should I hunt for?</h2>
+<p class="muted">Describe anything you want Opportunity Hunter to find, evaluate or monitor. You do not need to know the right search terms or fill out a complicated form.</p>
+
+<textarea id="huntQuery" placeholder="Example: Find remote summer internships in sports marketing for a college sophomore near Chicago."></textarea>
+
+<div class="examples">
+<span class="example" onclick="fillExample('Find internships in sports marketing near Chicago for a college student.')">Internships</span>
+<span class="example" onclick="fillExample('Find scholarships for a high school student interested in music and science.')">Scholarships</span>
+<span class="example" onclick="fillExample('Find healthcare AI consulting or advisory gigs that can be done remotely with limited weekly hours.')">Consulting gigs</span>
+<span class="example" onclick="fillExample('Find worthwhile AI and agentic hackathons or innovation competitions that are currently open.')">Hackathons</span>
+<span class="example" onclick="fillExample('Find grants, fellowships or accelerators for an early-stage idea.')">Grants & fellowships</span>
+<span class="example" onclick="fillExample('Monitor for meaningful sales or price drops on a specific item I want to buy.')">Sales & price drops</span>
+<span class="example" onclick="fillExample('Find estate sales within 25 miles that mention baseball cards, sports cards, memorabilia or unopened wax.')">Collectibles</span>
+<span class="example" onclick="fillExample('Find speaking, conference or advisory opportunities where my experience could be valuable.')">Speaking & advisory</span>
+<span class="example" onclick="fillExample('Find useful local opportunities, events or limited-availability openings that fit my interests.')">Local opportunities</span>
+</div>
+
+<button onclick="runAdHocHunt()">Run This Hunt</button>
+
+<div class="steps">
+<span class="step">Know Me</span><span>→</span>
+<span class="step">Hunt</span><span>→</span>
+<span class="step">Decide</span><span>→</span>
+<span class="step">Remember</span><span>→</span>
+<span class="step">Act</span>
+</div>
+</section>
+
+<div class="grid"><section class="card">
+<h2>Personalize this Hunt</h2>
+<p class="muted">Optional. Tell Opportunity Hunter anything about you that should influence the results. Skills matter, but so do your interests, goals, preferences and constraints.</p>
+
+<div class="profile-hints">
+<span class="chip">What I can do</span>
+<span class="chip">What I care about</span>
+<span class="chip">What I want to achieve</span>
+<span class="chip">My constraints & preferences</span>
+</div>
+
+<textarea id="profileContext" placeholder="Example: I’m studying psychology, love animals and photography, don’t have a car, can work about 10 hours a week, and want to earn extra money this semester."></textarea>
+
+<p class="muted">A fuller version can also learn through guided questions, a resume/CV, or public profile links. Free text keeps this demo fast.</p>
+</section>
+<section class="card"><h2>My Saved Hunts</h2>
+<div class="hunt"><strong>AI Competitions</strong><div class="muted">Weekly · Remote · AI, agents, hackathons</div><p><button onclick="runHunt('AI Competitions')">Run Hunt Now</button></p></div>
+<div class="hunt"><strong>Sports Card Estate Sales</strong><div class="muted">Weekly » Northbrook, IL » within 25 miles</div><p><button onclick="runHunt('Sports Card Estate Sales')">Run Hunt Now</button></p></div>
 </section></div>
-<section class="card"><h2>Results</h2><div id="status" class="muted">Choose a Saved Hunt and run it.</div><pre id="result">Ranked NEW and CHANGED opportunities will appear here.</pre></section>
+<section class="card">
+<h2>Results & What Changed</h2>
+<div id="status" class="muted">Describe a new Hunt above or run one of your Saved Hunts.</div>
+
+<div id="resultsSummary" class="results-summary"></div>
+
+<div id="resultActions" class="result-actions" style="display:none">
+<button class="secondary" onclick="copyResults()">Copy Results</button>
+<button class="secondary" onclick="exportCSV()">Export CSV</button>
+</div>
+
+<details id="fullAnalysis">
+<summary>Full analysis</summary>
+<pre id="result">Ranked NEW and CHANGED opportunities will appear here.</pre>
+</details>
+</section>
 </main><script>
 const APP="app",USER="opportunity-hunter-demo";
 function lastText(events){for(let i=events.length-1;i>=0;i--){let c=events[i]?.content;if(c?.role==="model"&&Array.isArray(c.parts)){let t=c.parts.map(p=>p?.text).filter(Boolean).join("\n");if(t.trim())return t}}return""}
+
+
+let currentResultsTable=[];
+
+function escapeHtml(value){
+  return String(value ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;");
+}
+
+function renderCell(value){
+  let safe=escapeHtml(value);
+  safe=safe.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener">$1</a>'
+  );
+  safe=safe.replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>");
+  return safe;
+}
+
+function findRankedTable(markdown){
+  const lines=markdown.split(/\r?\n/);
+
+  for(let i=0;i<lines.length-1;i++){
+    const header=lines[i].trim();
+    const separator=lines[i+1].trim();
+
+    if(!header.includes("|") || !separator.includes("|")) continue;
+    if(!/^\|?[\s:|-]+\|[\s:|-]+/.test(separator)) continue;
+
+    const headers=header
+      .replace(/^\||\|$/g,"")
+      .split("|")
+      .map(x=>x.trim());
+
+    const normalized=headers.map(x=>x.toLowerCase());
+
+    if(
+      !normalized.some(x=>x.includes("rank")) ||
+      !normalized.some(x=>x.includes("title") || x.includes("opportunity"))
+    ){
+      continue;
+    }
+
+    const rows=[];
+
+    for(let j=i+2;j<lines.length;j++){
+      const line=lines[j].trim();
+      if(!line.includes("|")) break;
+
+      const cells=line
+        .replace(/^\||\|$/g,"")
+        .split("|")
+        .map(x=>x.trim());
+
+      if(cells.length>=headers.length){
+        rows.push(cells.slice(0,headers.length));
+      }
+    }
+
+    return {headers,rows};
+  }
+
+  return null;
+}
+
+function renderResults(markdown){
+  document.getElementById("result").textContent=markdown;
+
+  const summary=document.getElementById("resultsSummary");
+  const actions=document.getElementById("resultActions");
+  const table=findRankedTable(markdown);
+
+  if(!table || !table.rows.length){
+    currentResultsTable=[];
+    actions.style.display="none";
+    summary.innerHTML="<p class='muted'>Full analysis is available below.</p>";
+    document.getElementById("fullAnalysis").open=true;
+    return;
+  }
+
+  currentResultsTable=[table.headers,...table.rows];
+
+  let html="<div class='results-meta'>"+table.rows.length+" ranked opportunities</div>";
+  html+="<div style='overflow-x:auto'><table class='results-table'><thead><tr>";
+
+  for(const h of table.headers){
+    html+="<th>"+renderCell(h)+"</th>";
+  }
+
+  html+="</tr></thead><tbody>";
+
+  for(const row of table.rows){
+    html+="<tr>";
+    for(const cell of row){
+      html+="<td>"+renderCell(cell)+"</td>";
+    }
+    html+="</tr>";
+  }
+
+  html+="</tbody></table></div>";
+
+  summary.innerHTML=html;
+  actions.style.display="flex";
+  document.getElementById("fullAnalysis").open=false;
+}
+
+async function copyResults(){
+  if(!currentResultsTable.length) return;
+
+  const text=currentResultsTable
+    .map(row=>row.map(cell=>cell.replace(/\[([^\]]+)\]\(([^)]+)\)/g,"$1 - $2")).join("\t"))
+    .join("\n");
+
+  await navigator.clipboard.writeText(text);
+
+  const status=document.getElementById("status");
+  status.textContent="Results copied — ready to paste into Google Sheets or another spreadsheet.";
+}
+
+function exportCSV(){
+  if(!currentResultsTable.length) return;
+
+  const csv=currentResultsTable.map(row=>
+    row.map(cell=>{
+      const clean=cell.replace(/\[([^\]]+)\]\(([^)]+)\)/g,"$1 - $2").replaceAll('"','""');
+      return `"${clean}"`;
+    }).join(",")
+  ).join("\n");
+
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download="opportunity-hunter-results.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function fillExample(text){
+  const box=document.getElementById("huntQuery");
+  box.value=text;
+  box.focus();
+}
+
+async function runAdHocHunt(){
+  const query=document.getElementById("huntQuery").value.trim();
+  const profileContext=document.getElementById("profileContext").value.trim();
+
+  if(!query){
+    document.getElementById("status").textContent="Tell Opportunity Hunter what you want it to find.";
+    document.getElementById("huntQuery").focus();
+    return;
+  }
+
+  const status=document.getElementById("status");
+  const result=document.getElementById("result");
+  const buttons=[...document.querySelectorAll("button")];
+
+  buttons.forEach(b=>b.disabled=true);
+  status.textContent="Running your new Hunt...";
+  result.textContent="Understanding your request, searching, verifying and evaluating opportunities...";
+
+  try{
+    const response=await fetch("/hunter/run",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        query:query,
+        profile_context:profileContext
+      })
+    });
+
+    if(!response.ok){
+      throw new Error(`Hunt failed (${response.status}): ${await response.text()}`);
+    }
+
+    const data=await response.json();
+
+    if(data.status!=="success"){
+      throw new Error(data.message || "Hunt failed.");
+    }
+
+    renderResults(data.text);
+    status.textContent="Your Hunt completed.";
+  }catch(error){
+    status.textContent="Something went wrong.";
+    result.textContent=error.message;
+  }finally{
+    buttons.forEach(b=>b.disabled=false);
+  }
+}
+
 async function runHunt(name){
   const status=document.getElementById("status");
   const result=document.getElementById("result");
@@ -36,7 +316,7 @@ async function runHunt(name){
       throw new Error(data.message || "Hunt failed.");
     }
 
-    result.textContent=data.text;
+    renderResults(data.text);
     status.textContent=`${name} completed.`;
   }catch(error){
     status.textContent="Something went wrong.";

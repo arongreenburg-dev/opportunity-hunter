@@ -85,10 +85,16 @@ def hunter_ui() -> FileResponse:
 
 @app.post("/hunter/run", include_in_schema=False)
 async def run_hunter(payload: dict) -> dict:
-    """Run a Saved Hunt through the existing ADK Runner."""
-    hunt_name = payload.get("hunt_name")
-    if not hunt_name:
-        return {"status": "error", "message": "hunt_name is required"}
+    """Run either a Saved Hunt or a free-text Opportunity Hunt."""
+    hunt_name = (payload.get("hunt_name") or "").strip()
+    query = (payload.get("query") or "").strip()
+    profile_context = (payload.get("profile_context") or "").strip()
+
+    if not hunt_name and not query:
+        return {
+            "status": "error",
+            "message": "Describe what you want Opportunity Hunter to find."
+        }
 
     user_id = "opportunity-hunter-demo"
     runner = app.state.runner
@@ -98,12 +104,43 @@ async def run_hunter(payload: dict) -> dict:
         user_id=user_id,
     )
 
-    prompt = (
-        f"Run my {hunt_name} Hunt now. Follow all saved Hunt criteria. "
-        "Find and rank the best current opportunities, use my stored profile "
-        "where relevant, surface NEW or CHANGED results, and give a pursuit "
-        "plan for the strongest result."
-    )
+    if hunt_name:
+        prompt = (
+            f"Run my {hunt_name} Hunt now. Follow all saved Hunt criteria. "
+            "Find and rank the best current opportunities, use my stored profile "
+            "where relevant, surface NEW or CHANGED results, and give a pursuit "
+            "plan for the strongest result."
+        )
+        label = hunt_name
+    else:
+        prompt = (
+            "Run an ad hoc Opportunity Hunt based on this user's request:\n\n"
+            f"{query}\n\n"
+            "Infer the most useful search criteria from the request, including "
+            "opportunity type, keywords, location or remote preference, value, "
+            "time horizon, effort, and exclusions when they are reasonably clear. "
+            "Do not require the user to know the Opportunity Hunter schema. "
+            "Use reasonable assumptions when non-critical information is missing "
+            "and clearly state those assumptions. Find current opportunities, "
+            "verify material facts from exact opportunity/listing sources whenever "
+            "possible, rank the results by fit and value, and provide a concrete "
+            "next action for the strongest opportunities."
+        )
+
+        if profile_context:
+            prompt += (
+                "\n\nThe user also provided this additional personal context. "
+                "Use it to personalize evaluation and ranking where relevant:\n"
+                f"{profile_context}"
+            )
+
+        prompt += (
+            "\n\nAlso use the stored Opportunity Hunter profile when it is "
+            "relevant, but do not assume career-oriented profile information is "
+            "relevant to unrelated personal Hunts."
+        )
+
+        label = query[:80]
 
     message = types.Content(
         role="user",
@@ -126,7 +163,7 @@ async def run_hunter(payload: dict) -> dict:
 
     return {
         "status": "success",
-        "hunt_name": hunt_name,
+        "hunt_name": label,
         "text": final_text or "Hunt completed, but no final text was returned.",
     }
 
