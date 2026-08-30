@@ -18,7 +18,11 @@ textarea{width:100%;min-height:105px;border:1px solid #cfd7e3;border-radius:10px
 .secondary{background:#fff;color:#0b57d0;border:1px solid #0b57d0}
 details{margin-top:14px}
 summary{cursor:pointer;font-weight:700;color:#344054}
+
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid #c8d4e8;border-top-color:#0b57d0;border-radius:50%;animation:spin .8s linear infinite;margin-right:7px;vertical-align:-2px}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style></head>
+
 
 
 <body><header>
@@ -236,6 +240,31 @@ function exportCSV(){
   URL.revokeObjectURL(url);
 }
 
+
+let progressTimer=null;
+
+function startProgress(type){
+  const status=document.getElementById("status");
+  const stages = type==="saved"
+    ? ["Loading your Saved Hunt…","Searching current sources…","Verifying opportunity details…","Comparing with memory…","Ranking the strongest matches…","Preparing results…"]
+    : ["Understanding your Hunt…","Searching current sources…","Verifying opportunity details…","Evaluating fit and value…","Checking what is NEW or CHANGED…","Preparing results…"];
+
+  let i=0;
+  status.innerHTML=`<span class="spinner"></span>${stages[0]}`;
+
+  progressTimer=setInterval(()=>{
+    i=Math.min(i+1,stages.length-1);
+    status.innerHTML=`<span class="spinner"></span>${stages[i]}`;
+  },4000);
+}
+
+function stopProgress(){
+  if(progressTimer){
+    clearInterval(progressTimer);
+    progressTimer=null;
+  }
+}
+
 function fillExample(text){
   const box=document.getElementById("huntQuery");
   box.value=text;
@@ -257,7 +286,7 @@ async function runAdHocHunt(){
   const buttons=[...document.querySelectorAll("button")];
 
   buttons.forEach(b=>b.disabled=true);
-  status.textContent="Running your new Hunt...";
+  startProgress("adhoc");
   result.textContent="Understanding your request, searching, verifying and evaluating opportunities...";
 
   try{
@@ -281,8 +310,10 @@ async function runAdHocHunt(){
     }
 
     renderResults(data.text);
+    stopProgress();
     status.textContent="Your Hunt completed.";
   }catch(error){
+    stopProgress();
     status.textContent="Something went wrong.";
     result.textContent=error.message;
   }finally{
@@ -296,7 +327,7 @@ async function runHunt(name){
   const buttons=[...document.querySelectorAll("button")];
 
   buttons.forEach(b=>b.disabled=true);
-  status.textContent=`Running ${name}...`;
+  startProgress("saved");
   result.textContent="Searching, verifying, scoring and checking memory...";
 
   try{
@@ -317,8 +348,10 @@ async function runHunt(name){
     }
 
     renderResults(data.text);
+    stopProgress();
     status.textContent=`${name} completed.`;
   }catch(error){
+    stopProgress();
     status.textContent="Something went wrong.";
     result.textContent=error.message;
   }finally{
