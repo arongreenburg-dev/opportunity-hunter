@@ -1,0 +1,49 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Opportunity Hunter</title>
+<style>body{font-family:Arial,sans-serif;margin:0;background:#f6f8fc;color:#172033}header{background:#0b57d0;color:#fff;padding:28px}main{max-width:950px;margin:20px auto;padding:0 16px}.grid{display:grid;grid-template-columns:1fr 1.4fr;gap:16px}.card{background:#fff;border:1px solid #e1e6ef;border-radius:14px;padding:18px;margin-bottom:16px}.chip{display:inline-block;background:#eef4ff;color:#174ea6;padding:6px 9px;border-radius:20px;margin:3px;font-size:13px}.hunt{border:1px solid #dfe5ee;border-radius:10px;padding:12px;margin:10px 0}.muted{color:#667085;font-size:14px}button{background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:9px 13px;font-weight:bold;cursor:pointer}button:disabled{opacity:.5}pre{white-space:pre-wrap;background:#fbfcfe;border:1px solid #e3e7ef;border-radius:10px;padding:14px;min-height:150px;max-height:500px;overflow:auto;font-family:Arial,sans-serif;line-height:1.45}@media(max-width:700px){.grid{grid-template-columns:1fr}}</style></head>
+<body><header><h1>Opportunity Hunter</h1><p>Find it. Evaluate it. Go after what matters.</p></header><main>
+<div class="grid"><section class="card"><h2>About Me</h2><strong>User 1</strong><p class="muted">A persistent profile personalizes discovery and scoring.</p><span class="chip">Healthcare transformation</span><span class="chip">AI & agents</span><span class="chip">Strategy</span><span class="chip">Entrepreneurship</span><span class="chip">Limited travel</span></section>
+<section class="card"><h2>Saved Hunts</h2>
+<div class="hunt"><strong>AI Competitions</strong><div class="muted">Weekly · Remote · AI, agents, hackathons</div><p><button onclick="runHunt('AI Competitions')">Run Hunt</button></p></div>
+<div class="hunt"><strong>Sports Card Estate Sales</strong><div class="muted">Weekly » Northbrook, IL » within 25 miles</div><p><button onclick="runHunt('Sports Card Estate Sales')">Run Hunt</button></p></div>
+</section></div>
+<section class="card"><h2>Results</h2><div id="status" class="muted">Choose a Saved Hunt and run it.</div><pre id="result">Ranked NEW and CHANGED opportunities will appear here.</pre></section>
+</main><script>
+const APP="app",USER="opportunity-hunter-demo";
+function lastText(events){for(let i=events.length-1;i>=0;i--){let c=events[i]?.content;if(c?.role==="model"&&Array.isArray(c.parts)){let t=c.parts.map(p=>p?.text).filter(Boolean).join("\n");if(t.trim())return t}}return""}
+async function runHunt(name){
+  const status=document.getElementById("status");
+  const result=document.getElementById("result");
+  const buttons=[...document.querySelectorAll("button")];
+
+  buttons.forEach(b=>b.disabled=true);
+  status.textContent=`Running ${name}...`;
+  result.textContent="Searching, verifying, scoring and checking memory...";
+
+  try{
+    const response=await fetch("/hunter/run",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({hunt_name:name})
+    });
+
+    if(!response.ok){
+      throw new Error(`Hunt failed (${response.status}): ${await response.text()}`);
+    }
+
+    const data=await response.json();
+
+    if(data.status!=="success"){
+      throw new Error(data.message || "Hunt failed.");
+    }
+
+    result.textContent=data.text;
+    status.textContent=`${name} completed.`;
+  }catch(error){
+    status.textContent="Something went wrong.";
+    result.textContent=error.message;
+  }finally{
+    buttons.forEach(b=>b.disabled=false);
+  }
+}
+
+</script></body></html>

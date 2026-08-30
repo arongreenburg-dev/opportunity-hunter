@@ -20,6 +20,8 @@ import google.auth
 from a2a.server.tasks import InMemoryTaskStore
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from google.genai import types
 from google.adk.cli.fast_api import get_fast_api_app
 from google.adk.runners import Runner
 from google.cloud import logging as google_cloud_logging
@@ -73,6 +75,60 @@ app: FastAPI = get_fast_api_app(
 )
 app.title = "opportunity-hunter"
 app.description = "API for interacting with the Agent opportunity-hunter"
+
+
+@app.get("/hunter", include_in_schema=False)
+def hunter_ui() -> FileResponse:
+    """Serve the Opportunity Hunter user interface."""
+    return FileResponse(os.path.join(os.path.dirname(__file__), "hunter_ui.html"))
+
+
+@app.post("/hunter/run", include_in_schema=False)
+async def run_hunter(payload: dict) -> dict:
+    """Run a Saved Hunt through the existing ADK Runner."""
+    hunt_name = payload.get("hunt_name")
+    if not hunt_name:
+        return {"status": "error", "message": "hunt_name is required"}
+
+    user_id = "opportunity-hunter-demo"
+    runner = app.state.runner
+
+    session = await runner.session_service.create_session(
+        app_name=app.state.agent_app_name,
+        user_id=user_id,
+    )
+
+    prompt = (
+        f"Run my {hunt_name} Hunt now. Follow all saved Hunt criteria. "
+        "Find and rank the best current opportunities, use my stored profile "
+        "where relevant, surface NEW or CHANGED results, and give a pursuit "
+        "plan for the strongest result."
+    )
+
+    message = types.Content(
+        role="user",
+        parts=[types.Part(text=prompt)],
+    )
+
+    final_text = ""
+
+    async for event in runner.run_async(
+        user_id=user_id,
+        session_id=session.id,
+        new_message=message,
+    ):
+        content = getattr(event, "content", None)
+        if content and getattr(content, "role", None) == "model":
+            for part in getattr(content, "parts", []) or []:
+                part_text = getattr(part, "text", None)
+                if part_text:
+                    final_text = part_text
+
+    return {
+        "status": "success",
+        "hunt_name": hunt_name,
+        "text": final_text or "Hunt completed, but no final text was returned.",
+    }
 
 
 @app.post("/feedback")
