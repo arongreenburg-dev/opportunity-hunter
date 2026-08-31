@@ -1,92 +1,213 @@
-# opportunity-hunter
+# Opportunity Hunter
 
-Simple ReAct agent
-Agent generated with `agents-cli` version `1.3.1`
+**An AI agent that discovers, evaluates, prioritizes, remembers, and helps pursue high-value opportunities based on who you are and what matters to you.**
 
-## Project Structure
+**Live app:** https://opportunity-hunter-107621546882.us-central1.run.app/hunter
 
-```
-opportunity-hunter/
-├── app/         # Core agent code
-│   ├── agent.py               # Main agent logic
-│   ├── fast_api_app.py        # FastAPI Backend server
-│   └── app_utils/             # App utilities and helpers
-├── tests/                     # Unit, integration, and load tests
-├── GEMINI.md                  # AI-assisted development guide
-└── pyproject.toml             # Project dependencies
-```
+Built for the **Google Cloud All Things Agentic Hackathon — Taskmaster track**.
 
-> 💡 **Tip:** Use [Antigravity CLI](https://antigravity.google/) for AI-assisted development - project context is pre-configured in `GEMINI.md`.
+## The Problem
 
-## Requirements
+High-value opportunities are scattered across job boards, scholarship sites, competitions, marketplaces, local listings, newsletters, and countless other sources.
 
-Before you begin, ensure you have:
-- **uv**: Python package manager (used for all dependency management in this project) - [Install](https://docs.astral.sh/uv/getting-started/installation/) ([add packages](https://docs.astral.sh/uv/concepts/dependencies/) with `uv add <package>`)
-- **agents-cli**: Agents CLI - Install with `uv tool install google-agents-cli`
-- **Google Cloud SDK**: For GCP services - [Install](https://cloud.google.com/sdk/docs/install)
+Finding links is not enough. Users still need to decide:
 
+- Is this relevant to me?
+- Am I eligible?
+- Is it worth the effort?
+- Is it current?
+- Have I seen it before?
+- Did something change?
+- What should I do next?
 
-## Quick Start
+Opportunity Hunter turns search into an agentic decision workflow:
 
-Install `agents-cli` and its skills if not already installed:
+**Know Me → Hunt → Decide → Remember → Act → Repeat**
 
-```bash
-uvx google-agents-cli setup
-```
+## What It Does
 
-Install required packages:
+Users can describe almost any opportunity in ordinary language, for example:
 
-```bash
-agents-cli install
-```
+- "Find AI hackathons I can still enter."
+- "Scholarships for a high school student interested in music and science."
+- "Find sports-card estate sales within 25 miles."
+- "Find consulting opportunities that fit my healthcare transformation experience."
 
-Test the agent with a local web server:
+Opportunity Hunter then interprets the request, searches current sources, verifies evidence, deduplicates results, scores opportunities, compares them with persistent memory, identifies what is new or changed, and recommends what to pursue next.
 
-```bash
-agents-cli playground
-```
+## Personalization and Saved Hunts
 
-You can also use features from the [ADK](https://adk.dev/) CLI with `uv run adk`.
+A Hunt can optionally incorporate what the user can do, what they care about, what they want to achieve, and their preferences or constraints.
 
-## Commands
+Saved Hunt criteria persist in **Cloud Firestore**. The MVP includes examples such as:
 
-| Command              | Description                                                                                 |
-| -------------------- | ------------------------------------------------------------------------------------------- |
-| `agents-cli install` | Install dependencies using uv                                                         |
-| `agents-cli playground` | Launch local development environment                                                  |
-| `agents-cli lint`    | Run code quality checks                                                               |
-| `agents-cli eval`    | Evaluate agent behavior (generate, grade, analyze, and more — see `agents-cli eval --help`) |
-| `uv run pytest tests/unit tests/integration` | Run unit and integration tests                                                        || [A2A Inspector](https://github.com/a2aproject/a2a-inspector) | Launch A2A Protocol Inspector                                                        |
+- AI Competitions
+- Sports Card Estate Sales
 
-## 🛠️ Project Management
+Firestore also stores prior opportunity evaluations so the system can identify **NEW**, **UNCHANGED**, and **CHANGED** opportunities.
 
-| Command | What It Does |
-|---------|--------------|
-| `agents-cli scaffold enhance` | Add CI/CD pipelines and Terraform infrastructure |
-| `agents-cli infra cicd` | One-command setup of entire CI/CD pipeline + infrastructure |
-| `agents-cli scaffold upgrade` | Auto-upgrade to latest version while preserving customizations |
+Saved Hunts currently run on demand. Automated recurring execution is a roadmap item.
 
----
+## Decision Scoring
 
-## Development
+Each opportunity is evaluated using a weighted framework:
 
-Edit your agent logic in `app/agent.py` and test with `agents-cli playground` - it auto-reloads on save.
+- Strategic fit: 30%
+- Capability fit: 25%
+- Expected value: 20%
+- Probability of success: 15%
+- Effort efficiency: 10%
+
+Recommendations are **PURSUE** at 80+, **CONSIDER** at 65–79, and **PASS** below 65.
+
+## Source Discipline
+
+High-confidence recommendations require candidate-specific evidence. Generic homepages, directories, category pages, search results, and login portals are not sufficient for a PURSUE recommendation when an exact listing should exist.
+
+If an exact source cannot be verified, the opportunity is treated as needing verification rather than presented with false confidence.
+
+## Pursuit Strategist
+
+For strong opportunities, a specialist agent identifies why the opportunity matters, risks and tradeoffs, the immediate next action, and a time-aware pursuit plan.
+
+The strategist receives the current date so it does not recommend planning phases that have already passed.
+
+## Results Experience
+
+The public UI provides:
+
+- free-text Hunts,
+- optional personal context,
+- Saved Hunts,
+- visible progress while the agent works,
+- ranked results,
+- scores and recommendations,
+- source links,
+- NEW / CHANGED state,
+- expandable full analysis,
+- Copy Results,
+- Export CSV.
+
+## Architecture
+
+The core flow is:
+
+User  
+→ Opportunity Hunter Web UI  
+→ Root Agent / Google ADK  
+→ Profile + Hunt Context  
+→ Scout Agent + Google Search  
+→ Verify / Normalize / Deduplicate  
+→ Decision Scoring  
+→ Firestore Memory / Change Detection  
+→ Pursuit Strategist  
+→ Ranked Results + Next Actions
+
+See `docs/architecture.md` for the architecture diagram.
+
+## Google Cloud and Agent Stack
+
+Opportunity Hunter uses:
+
+- **Google Agent Development Kit (ADK)** for orchestration
+- **Gemini 3.6 Flash** on Vertex AI
+- **Google Search** for current opportunity discovery
+- **Cloud Firestore** for persistent state and memory
+- **Cloud Run** for the hosted application
+- **Cloud Build** for deployment
+- **FastAPI**
+- **Python / uv**
+
+## Repository Structure
+
+- `app/agent.py` — core agents, scoring, and orchestration
+- `app/fast_api_app.py` — FastAPI / ADK backend
+- `app/hunter_ui.html` — web interface
+- `app/memory_store.py` — Firestore persistence and change detection
+- `data/` — profile and state schemas
+- `docs/architecture.md` — architecture diagram
+- `tests/` — test scaffold
+- `Dockerfile` — Cloud Run container
+- `pyproject.toml` — dependencies
+
+## Local Setup
+
+Requirements:
+
+- Python
+- uv
+- Google Cloud SDK
+- Google Agents CLI
+- Google Cloud project with Vertex AI access
+
+Install the Agents CLI:
+
+    uv tool install google-agents-cli
+
+Authenticate and choose a project:
+
+    gcloud auth application-default login
+    gcloud config set project YOUR_PROJECT_ID
+
+Install dependencies:
+
+    agents-cli install
+
+Run locally:
+
+    agents-cli playground
 
 ## Deployment
 
-```bash
-gcloud config set project <your-project-id>
-agents-cli deploy
-```
+Enable the required Google Cloud services, including Vertex AI, Cloud Run, Cloud Build, and Firestore.
 
-To add CI/CD and Terraform, run `agents-cli scaffold enhance`.
-To set up your production infrastructure, run `agents-cli infra cicd`.
+Deploy with:
 
-## Observability
+    agents-cli deploy --project YOUR_PROJECT_ID --region us-central1
 
-Built-in telemetry exports to Cloud Trace, BigQuery, and Cloud Logging.
+Current public hackathon deployment:
 
-## A2A Inspector
+https://opportunity-hunter-107621546882.us-central1.run.app/hunter
 
-This agent supports the [A2A Protocol](https://a2a-protocol.org/). Use the [A2A Inspector](https://github.com/a2aproject/a2a-inspector) to test interoperability.
-See the [A2A Inspector docs](https://github.com/a2aproject/a2a-inspector) for details.
+## Validation
+
+The MVP has been tested with:
+
+- strong-fit PURSUE cases,
+- weak-fit PASS cases,
+- duplicate candidates,
+- missing or unknown information,
+- NEW → UNCHANGED → CHANGED persistence,
+- Saved Hunts,
+- free-text Hunts,
+- exact-source verification,
+- current-date pursuit planning,
+- public Cloud Run execution.
+
+## MVP Boundaries
+
+The hackathon MVP intentionally does not include:
+
+- authentication / multi-user accounts,
+- automated Cloud Scheduler execution,
+- direct Google Sheets synchronization,
+- email / Slack / calendar notifications,
+- payments,
+- continuous broad web indexing.
+
+These are roadmap extensions rather than requirements for demonstrating the core agent loop.
+
+## What's Next
+
+Natural extensions include:
+
+- recurring automated Hunts,
+- notifications only when high-value opportunities appear or change,
+- résumé and public-profile ingestion,
+- Google Sheets / Gmail / Calendar integrations,
+- collaborative Hunts,
+- learning from which opportunities users pursue or reject.
+
+## Product Principle
+
+**Don't give me more things to search. Give me the opportunities worth acting on.**
