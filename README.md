@@ -211,3 +211,18 @@ Natural extensions include:
 ## Product Principle
 
 **Don't give me more things to search. Give me the opportunities worth acting on.**
+
+## Reproducible Testing
+
+The easiest way to reproduce the core agent workflow is through the public application:
+
+1. Open https://opportunity-hunter-107621546882.us-central1.run.app/hunter
+2. Run the saved **AI Competitions** Hunt, or enter a free-text Hunt.
+3. Confirm the agent displays progress while searching and evaluating.
+4. Confirm the result contains ranked opportunities, source URLs, scores, and PURSUE / CONSIDER / PASS recommendations.
+5. Run the same Saved Hunt again to exercise persistent Firestore memory and NEW / UNCHANGED / CHANGED behavior.
+6. Expand **Full analysis** to inspect detailed assessment and pursuit-strategy output.
+
+For local development, follow the Local Setup instructions above and run:
+
+    agents-cli playground
