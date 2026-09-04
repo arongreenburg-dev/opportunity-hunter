@@ -1,115 +1,145 @@
 # Opportunity Hunter
 
-**An AI agent that discovers, evaluates, prioritizes, remembers, and helps pursue high-value opportunities based on who you are and what matters to you.**
+**Turn scattered opportunity discovery into a prioritized action portfolio.**
+
+Opportunity Hunter is an AI workflow agent that **finds, qualifies, prioritizes, tracks, and advances high-fit opportunities** based on who the user is, what they can do, what they care about, and what they are trying to achieve.
 
 **Live app:** https://opportunity-hunter-107621546882.us-central1.run.app/hunter
 
-Built for the **Google Cloud All Things Agentic Hackathon — Taskmaster track**.
+## Why This Exists
 
-## The Problem
+The problem is not a shortage of search results. It is follow-through.
 
-High-value opportunities are scattered across job boards, scholarship sites, competitions, marketplaces, local listings, newsletters, and countless other sources.
+High-value opportunities are fragmented across job boards, hackathon sites, scholarship pages, marketplaces, local listings, newsletters, professional networks, and other sources. A user can easily collect dozens of links and still not know:
 
-Finding links is not enough. Users still need to decide:
-
-- Is this relevant to me?
-- Am I eligible?
-- Is it worth the effort?
-- Is it current?
+- Is this current and legitimate?
+- Am I actually eligible?
+- How well does it fit me?
+- Is the upside worth the effort?
 - Have I seen it before?
-- Did something change?
+- Did anything important change?
 - What should I do next?
 
-Opportunity Hunter turns search into an agentic decision workflow:
+Search finds options. **Opportunity Hunter turns those options into decisions and next actions.**
 
-**Know Me → Hunt → Decide → Remember → Act → Repeat**
+## Core Workflow
 
-## What It Does
+**Find → Qualify → Prioritize → Track → Act**
 
-Users can describe almost any opportunity in ordinary language, for example:
+1. **Find** — interpret a natural-language Hunt and search current sources.
+2. **Qualify** — verify candidate-specific evidence, eligibility, status, and key facts.
+3. **Prioritize** — score opportunities against the user's goals, capabilities, constraints, and expected value.
+4. **Track** — use persistent memory to distinguish NEW, CHANGED, and UNCHANGED opportunities.
+5. **Act** — generate a practical pursuit plan for the strongest opportunities.
 
-- "Find AI hackathons I can still enter."
-- "Scholarships for a high school student interested in music and science."
-- "Find sports-card estate sales within 25 miles."
-- "Find consulting opportunities that fit my healthcare transformation experience."
+The result is not another search list. It is a managed opportunity portfolio.
 
-Opportunity Hunter then interprets the request, searches current sources, verifies evidence, deduplicates results, scores opportunities, compares them with persistent memory, identifies what is new or changed, and recommends what to pursue next.
+## Example Hunts
 
-## Personalization and Saved Hunts
+Users can enter ordinary-language requests such as:
 
-A Hunt can optionally incorporate what the user can do, what they care about, what they want to achieve, and their preferences or constraints.
+- “Find AI hackathons I can still enter.”
+- “Find consulting opportunities that fit healthcare transformation experience.”
+- “Scholarships for a high school student interested in music and science.”
+- “Find sports-card estate sales within 25 miles.”
 
-Saved Hunt criteria persist in **Cloud Firestore**. The MVP includes examples such as:
+A Hunt can also include personal context such as skills, goals, interests, preferences, constraints, geography, and time availability.
 
-- AI Competitions
-- Sports Card Estate Sales
+## What Makes It Different
 
-Firestore also stores prior opportunity evaluations so the system can identify **NEW**, **UNCHANGED**, and **CHANGED** opportunities.
+### 1. Personal fit, not generic relevance
 
-Saved Hunts currently run on demand. Automated recurring execution is a roadmap item.
+Opportunity Hunter uses a persistent user profile rather than evaluating every opportunity as if all users were interchangeable.
 
-## Decision Scoring
+### 2. Structured decision scoring
 
-Each opportunity is evaluated using a weighted framework:
+Each opportunity is evaluated using a deterministic weighted framework:
 
-- Strategic fit: 30%
-- Capability fit: 25%
-- Expected value: 20%
-- Probability of success: 15%
-- Effort efficiency: 10%
+- Strategic fit — 30%
+- Capability fit — 25%
+- Expected value — 20%
+- Probability of success — 15%
+- Effort efficiency — 10%
 
-Recommendations are **PURSUE** at 80+, **CONSIDER** at 65–79, and **PASS** below 65.
+Recommendations are:
 
-## Source Discipline
+- **PURSUE** — 80+
+- **CONSIDER** — 65–79
+- **PASS** — below 65
 
-High-confidence recommendations require candidate-specific evidence. Generic homepages, directories, category pages, search results, and login portals are not sufficient for a PURSUE recommendation when an exact listing should exist.
+### 3. Source discipline
 
-If an exact source cannot be verified, the opportunity is treated as needing verification rather than presented with false confidence.
+High-confidence recommendations require candidate-specific evidence. Generic homepages, directories, category pages, and search-result pages are not enough when an exact opportunity page should exist.
 
-## Pursuit Strategist
+If the evidence cannot be verified, the system lowers confidence instead of inventing certainty.
 
-For strong opportunities, a specialist agent identifies why the opportunity matters, risks and tradeoffs, the immediate next action, and a time-aware pursuit plan.
+### 4. Persistent memory
+
+Cloud Firestore stores Hunts and prior evaluations so Opportunity Hunter can identify whether an opportunity is:
+
+- **NEW**
+- **CHANGED**
+- **UNCHANGED**
+
+This prevents repeated searches from becoming repeated work.
+
+### 5. Pursuit strategy
+
+For strong opportunities, a specialist agent produces:
+
+- why the opportunity matters,
+- urgency and timing,
+- requirements,
+- advantages and gaps,
+- risks and tradeoffs,
+- an immediate next action,
+- a short pursuit plan.
 
 The strategist receives the current date so it does not recommend planning phases that have already passed.
 
-## Results Experience
+## User Experience
 
-The public UI provides:
+The public product includes:
 
 - free-text Hunts,
 - optional personal context,
 - Saved Hunts,
 - visible progress while the agent works,
 - ranked results,
-- scores and recommendations,
-- source links,
+- scores and PURSUE / CONSIDER / PASS recommendations,
+- verified source links,
 - NEW / CHANGED state,
-- expandable full analysis,
+- expandable detailed analysis,
 - Copy Results,
 - Export CSV.
 
 ## Architecture
 
-The core flow is:
+```mermaid
+flowchart LR
+    U[User] --> UI[Opportunity Hunter Web UI]
+    UI --> API[FastAPI / ADK Runner]
+    API --> A[Opportunity Hunter Root Agent]
+    A --> P[Profile + Hunt Context]
+    A --> S[Scout Agent]
+    S --> GS[Google Search]
+    A --> N[Verify / Normalize / Deduplicate]
+    N --> E[Decision Scoring]
+    E --> M[Firestore Memory + Change Detection]
+    M --> PS[Pursuit Strategist]
+    PS --> R[Ranked Results + Next Actions]
+    R --> UI
+    P --> F[(Cloud Firestore)]
+    M --> F
+```
 
-User  
-→ Opportunity Hunter Web UI  
-→ Root Agent / Google ADK  
-→ Profile + Hunt Context  
-→ Scout Agent + Google Search  
-→ Verify / Normalize / Deduplicate  
-→ Decision Scoring  
-→ Firestore Memory / Change Detection  
-→ Pursuit Strategist  
-→ Ranked Results + Next Actions
+See `docs/architecture.md` for additional detail.
 
-See `docs/architecture.md` for the architecture diagram.
-
-## Google Cloud and Agent Stack
+## AI and Cloud Stack
 
 Opportunity Hunter uses:
 
-- **Google Agent Development Kit (ADK)** for orchestration
+- **Google Agent Development Kit (ADK)** for agent orchestration
 - **Gemini 3.6 Flash** on Vertex AI
 - **Google Search** for current opportunity discovery
 - **Cloud Firestore** for persistent state and memory
@@ -118,9 +148,67 @@ Opportunity Hunter uses:
 - **FastAPI**
 - **Python / uv**
 
+The model identifier used by the current agent implementation is defined in `app/agent.py`.
+
+## Technical Flow
+
+A representative run executes this sequence:
+
+1. Load the user profile and Saved Hunt or interpret a free-text Hunt.
+2. Scout current web sources.
+3. Verify source quality and current/open status.
+4. Normalize and deduplicate candidates.
+5. Score each viable opportunity.
+6. Record the evaluation in Firestore.
+7. Compare against prior state to determine NEW / CHANGED / UNCHANGED.
+8. Generate a Pursuit Plan for strong recommendations.
+9. Return ranked results with evidence and next actions.
+
+## Validation
+
+The MVP has been tested with:
+
+- strong-fit PURSUE cases,
+- weak-fit PASS cases,
+- hard eligibility failures,
+- duplicate candidates,
+- missing and unknown information,
+- exact-source verification,
+- NEW → UNCHANGED → CHANGED persistence,
+- Saved Hunts,
+- free-text Hunts,
+- current-date pursuit planning,
+- public Cloud Run execution.
+
+A validated end-to-end flow is:
+
+**UI → Hunt → Scout → Verify → Normalize/Dedupe → Score → Firestore Memory → Pursuit Strategist → Ranked Results**
+
+## AI Builders Judging Fit
+
+### Innovation & Creativity
+
+Opportunity Hunter is a meta-agent for opportunity management: it does not stop at discovery, but converts opportunities into a continuously managed decision portfolio.
+
+### Technical Implementation
+
+The product combines multi-agent orchestration, live search, deterministic scoring, structured state, persistent memory, change detection, and a hosted UI in one working workflow.
+
+### Problem Solving & Impact
+
+It reduces the manual burden of repeatedly searching, validating, comparing, remembering, and planning around high-value opportunities.
+
+### User Experience & Design
+
+The interface hides the internal agent complexity behind a simple question: **“What should I hunt for?”** Users receive ranked, evidence-linked decisions rather than raw search output.
+
+### Presentation & Feasibility
+
+The application is publicly deployed, reproducible, and intentionally scoped as a usable MVP with clear paths to recurring automation and integrations.
+
 ## Repository Structure
 
-- `app/agent.py` — core agents, scoring, and orchestration
+- `app/agent.py` — agents, scoring, tools, and orchestration
 - `app/fast_api_app.py` — FastAPI / ADK backend
 - `app/hunter_ui.html` — web interface
 - `app/memory_store.py` — Firestore persistence and change detection
@@ -142,20 +230,28 @@ Requirements:
 
 Install the Agents CLI:
 
-    uv tool install google-agents-cli
+```bash
+uv tool install google-agents-cli
+```
 
-Authenticate and choose a project:
+Authenticate and select a project:
 
-    gcloud auth application-default login
-    gcloud config set project YOUR_PROJECT_ID
+```bash
+gcloud auth application-default login
+gcloud config set project YOUR_PROJECT_ID
+```
 
 Install dependencies:
 
-    agents-cli install
+```bash
+agents-cli install
+```
 
 Run locally:
 
-    agents-cli playground
+```bash
+agents-cli playground
+```
 
 ## Deployment
 
@@ -163,66 +259,52 @@ Enable the required Google Cloud services, including Vertex AI, Cloud Run, Cloud
 
 Deploy with:
 
-    agents-cli deploy --project YOUR_PROJECT_ID --region us-central1
+```bash
+agents-cli deploy --project YOUR_PROJECT_ID --region us-central1
+```
 
-Current public hackathon deployment:
+Current public deployment:
 
 https://opportunity-hunter-107621546882.us-central1.run.app/hunter
 
-## Validation
+## Reproducible Demo
 
-The MVP has been tested with:
-
-- strong-fit PURSUE cases,
-- weak-fit PASS cases,
-- duplicate candidates,
-- missing or unknown information,
-- NEW → UNCHANGED → CHANGED persistence,
-- Saved Hunts,
-- free-text Hunts,
-- exact-source verification,
-- current-date pursuit planning,
-- public Cloud Run execution.
+1. Open the public application.
+2. Run the saved **AI Competitions** Hunt or enter a free-text Hunt.
+3. Watch the progress stages while the system searches and evaluates.
+4. Review ranked opportunities, source links, scores, and recommendations.
+5. Run the same Saved Hunt again to exercise persistent memory and NEW / CHANGED / UNCHANGED behavior.
+6. Expand **Full analysis** to inspect the detailed assessment and pursuit-strategy output.
 
 ## MVP Boundaries
 
-The hackathon MVP intentionally does not include:
+The current MVP intentionally does not include:
 
 - authentication / multi-user accounts,
-- automated Cloud Scheduler execution,
+- automated recurring execution,
 - direct Google Sheets synchronization,
 - email / Slack / calendar notifications,
 - payments,
 - continuous broad web indexing.
 
-These are roadmap extensions rather than requirements for demonstrating the core agent loop.
+These are roadmap extensions rather than requirements for proving the core product loop.
 
-## What's Next
+## Roadmap
 
 Natural extensions include:
 
 - recurring automated Hunts,
-- notifications only when high-value opportunities appear or change,
+- alerts only when high-value opportunities appear or materially change,
 - résumé and public-profile ingestion,
 - Google Sheets / Gmail / Calendar integrations,
 - collaborative Hunts,
-- learning from which opportunities users pursue or reject.
+- learning from which opportunities users pursue, reject, or complete,
+- portfolio analytics across opportunity types.
+
+## Development Note
+
+The current implementation was developed beginning August 24, 2026, within the AI Builders Hackathon build period that began August 21, 2026. It was also used as a submission in the Google Cloud All Things Agentic Hackathon. This AI Builders submission focuses on the product's broader SaaS/workflow value, usability, technical implementation, and real-world adoption potential.
 
 ## Product Principle
 
-**Don't give me more things to search. Give me the opportunities worth acting on.**
-
-## Reproducible Testing
-
-The easiest way to reproduce the core agent workflow is through the public application:
-
-1. Open https://opportunity-hunter-107621546882.us-central1.run.app/hunter
-2. Run the saved **AI Competitions** Hunt, or enter a free-text Hunt.
-3. Confirm the agent displays progress while searching and evaluating.
-4. Confirm the result contains ranked opportunities, source URLs, scores, and PURSUE / CONSIDER / PASS recommendations.
-5. Run the same Saved Hunt again to exercise persistent Firestore memory and NEW / UNCHANGED / CHANGED behavior.
-6. Expand **Full analysis** to inspect detailed assessment and pursuit-strategy output.
-
-For local development, follow the Local Setup instructions above and run:
-
-    agents-cli playground
+**Don’t give me more things to search. Give me the opportunities worth acting on.**
