@@ -14,7 +14,7 @@ import socket
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
 
@@ -68,23 +68,28 @@ def _proxy_configured(scheme: str) -> bool:
     return any(os.getenv(n) for n in names)
 
 
-def check_public_url(url: str) -> None:
+def check_public_url(url: str) -> str | None:
     """Reject URLs that would make the server reach a non-public destination.
 
     Source URLs are user-supplied, so without this the recheck would be a
     server-side request forgery primitive (loopback, private networks, cloud
     metadata). Every address a hostname resolves to must be globally routable.
+
+    Returns the validated IP address to connect to, so the fetch is pinned to
+    the address that was checked (no DNS-rebinding window). Returns None only
+    when an explicit egress proxy resolves names on our behalf.
     Set OH_ALLOW_PRIVATE_SOURCES=1 only for local testing.
     """
     parts = urlsplit(url)
     if parts.scheme not in ("http", "https") or not parts.hostname:
         raise SourceError("Only public http(s) web pages can be checked.")
-    if os.getenv("OH_ALLOW_PRIVATE_SOURCES") == "1":
-        return
+    allow_private = os.getenv("OH_ALLOW_PRIVATE_SOURCES") == "1"
     host = parts.hostname.rstrip(".").lower()
     blocked = SourceError("Only public web addresses can be checked.")
-    if host in ("localhost", "metadata", "metadata.google.internal") or host.endswith(
-        _INTERNAL_SUFFIXES
+    if (
+        (not allow_private
+        and host in ("localhost", "metadata", "metadata.google.internal"))
+        or host.endswith(_INTERNAL_SUFFIXES)
     ):
         raise blocked
     try:
@@ -101,16 +106,41 @@ def check_public_url(url: str) -> None:
             # enforces its own network policy; otherwise unresolvable is a
             # failure.
             if _proxy_configured(parts.scheme):
-                return
+                return None
             raise SourceError("The official page's host could not be found.") from exc
         addresses = [ipaddress.ip_address(info[4][0].split("%")[0]) for info in infos]
     for ip in addresses:
         mapped = getattr(ip, "ipv4_mapped", None)
-        if not ip.is_global or (mapped is not None and not mapped.is_global):
+        if not allow_private and (
+            not ip.is_global or (mapped is not None and not mapped.is_global)
+        ):
             raise blocked
+    return str(addresses[0])
 
 
-def fetch(url: str, *, demo_version: int = 1, timeout: float = 15.0) -> FetchResult:
+def _pinned_request(url: str, ip: str | None) -> tuple[str, dict, dict]:
+    """Rewrite the URL to connect to ``ip`` while keeping Host and TLS SNI.
+
+    Certificate verification still runs against the original hostname via
+    the ``sni_hostname`` extension.
+    """
+    if not ip:
+        return url, {}, {}
+    parts = urlsplit(url)
+    ip_host = f"[{ip}]" if ":" in ip else ip
+    netloc = ip_host + (f":{parts.port}" if parts.port else "")
+    headers = {"Host": parts.netloc.rsplit("@", 1)[-1]}
+    extensions = {"sni_hostname": parts.hostname} if parts.scheme == "https" else {}
+    return urlunsplit(parts._replace(netloc=netloc)), headers, extensions
+
+
+def fetch(
+    url: str,
+    *,
+    demo_version: int = 1,
+    timeout: float = 15.0,
+    transport: httpx.BaseTransport | None = None,
+) -> FetchResult:
     """Fetch an official source page. Raises SourceError on any failure."""
     if is_demo_url(url):
         return demo_page(url[len(DEMO_PREFIX) :].strip("/"), demo_version)
@@ -122,15 +152,18 @@ def fetch(url: str, *, demo_version: int = 1, timeout: float = 15.0) -> FetchRes
         with httpx.Client(
             follow_redirects=False,
             timeout=timeout,
+            transport=transport,
             headers={
                 "User-Agent": USER_AGENT,
                 "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
             },
         ) as client:
-            # Follow redirects by hand so every hop is validated.
+            # Follow redirects by hand so every hop is validated and pinned.
             for _hop in range(MAX_REDIRECTS + 1):
-                check_public_url(url)
-                response = client.get(url)
+                target, headers, extensions = _pinned_request(
+                    url, check_public_url(url)
+                )
+                response = client.get(target, headers=headers, extensions=extensions)
                 if not response.is_redirect:
                     break
                 url = urljoin(url, response.headers.get("location", ""))
@@ -152,4 +185,4 @@ def fetch(url: str, *, demo_version: int = 1, timeout: float = 15.0) -> FetchRes
         )
     if len(response.content) > MAX_BYTES:
         raise SourceError("The official page is too large to check.")
-    return FetchResult(str(response.url), response.status_code, response.text)
+    return FetchResult(url, response.status_code, response.text)

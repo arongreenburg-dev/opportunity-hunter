@@ -3,12 +3,14 @@
 These run without cloud credentials using the local JSON store.
 """
 
+import socket
 import threading
 from datetime import date
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import ClassVar
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -129,6 +131,7 @@ class _Pages(BaseHTTPRequestHandler):
     redirects: ClassVar[dict] = {}
 
     def do_GET(self):
+        _Pages.last_host = self.headers.get("Host")
         if self.path in self.redirects:
             self.send_response(302)
             self.send_header("Location", self.redirects[self.path])
@@ -310,3 +313,50 @@ def test_unreviewed_changes_accumulate_across_checks(t, monkeypatch):
     current["html"] = page("Open to US residents.", "March 20, 2027")
     review = t.check(o["id"])["review"]
     assert {c["field"] for c in review["changes"]} == {"deadline"}
+
+
+def test_fetch_connects_to_the_validated_address(http_source, monkeypatch):
+    """DNS is resolved once; the connection uses that IP, not a fresh lookup."""
+    base, pages = http_source
+    port = base.rsplit(":", 1)[1]
+    pages["/rules"] = (
+        200,
+        "<title>Rules</title><p>Applications close May 1, 2027.</p>",
+    )
+    real = socket.getaddrinfo
+    lookups = []
+
+    def resolver(host, *args, **kwargs):
+        if host == "rules.example":
+            lookups.append(host)
+            return real("127.0.0.1", *args, **kwargs)
+        return real(host, *args, **kwargs)
+
+    monkeypatch.setattr(socket, "getaddrinfo", resolver)
+    # "rules.example" does not exist in real DNS, so this only succeeds if the
+    # client connects to the pinned IP rather than resolving the name again.
+    result = sources.fetch(f"http://rules.example:{port}/rules")
+    assert "May 1, 2027" in result.html
+    assert result.url == f"http://rules.example:{port}/rules"
+    assert lookups == ["rules.example"]
+    assert _Pages.last_host == f"rules.example:{port}"
+
+
+def test_https_pinning_keeps_hostname_for_tls(monkeypatch):
+    monkeypatch.setattr(sources, "check_public_url", lambda url: "93.184.215.14")
+    seen = {}
+
+    def handler(request):
+        seen.update(
+            host=request.url.host,
+            header=request.headers["host"],
+            sni=request.extensions.get("sni_hostname"),
+        )
+        return httpx.Response(200, html="<p>ok</p>")
+
+    sources.fetch("https://rules.example.org/x", transport=httpx.MockTransport(handler))
+    assert seen == {
+        "host": "93.184.215.14",
+        "header": "rules.example.org",
+        "sni": "rules.example.org",
+    }
