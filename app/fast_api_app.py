@@ -13,27 +13,46 @@
 # limitations under the License.
 
 import contextlib
+import logging
 import os
 from collections.abc import AsyncIterator
 
 import google.auth
+import google.auth.exceptions
 from a2a.server.tasks import InMemoryTaskStore
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
-from google.genai import types
 from google.adk.cli.fast_api import get_fast_api_app
 from google.adk.runners import Runner
 from google.cloud import logging as google_cloud_logging
+from google.genai import types
 
 from app.app_utils import services
 from app.app_utils.a2a import attach_a2a_routes
 from app.app_utils.typing import Feedback
+from app.tracker_api import router as tracker_router
 
 load_dotenv()
-_, project_id = google.auth.default()
-logging_client = google_cloud_logging.Client()
-logger = logging_client.logger(__name__)
+try:
+    _, project_id = google.auth.default()
+    HAS_GCP_CREDENTIALS = True
+except google.auth.exceptions.DefaultCredentialsError:
+    # Without credentials, discovery (Gemini + Search) is unavailable but the
+    # decision tracker, source rechecks and the offline demo still work.
+    project_id = None
+    HAS_GCP_CREDENTIALS = False
+
+if HAS_GCP_CREDENTIALS:
+    logger = google_cloud_logging.Client().logger(__name__)
+else:
+    _std_logger = logging.getLogger(__name__)
+
+    class _StdLogger:
+        def log_struct(self, info: dict, severity: str = "INFO") -> None:
+            _std_logger.info("%s %s", severity, info)
+
+    logger = _StdLogger()
 allow_origins = (
     os.getenv("ALLOW_ORIGINS", "").split(",") if os.getenv("ALLOW_ORIGINS") else None
 )
@@ -70,11 +89,12 @@ app: FastAPI = get_fast_api_app(
     artifact_service_uri=services.ARTIFACT_SERVICE_URI,
     allow_origins=allow_origins,
     session_service_uri=services.SESSION_SERVICE_URI,
-    otel_to_cloud=True,
+    otel_to_cloud=HAS_GCP_CREDENTIALS,
     lifespan=lifespan,
 )
 app.title = "opportunity-hunter"
 app.description = "API for interacting with the Agent opportunity-hunter"
+app.include_router(tracker_router)
 
 
 @app.get("/hunter", include_in_schema=False)
@@ -93,7 +113,17 @@ async def run_hunter(payload: dict) -> dict:
     if not hunt_name and not query:
         return {
             "status": "error",
-            "message": "Describe what you want Opportunity Hunter to find."
+            "message": "Describe what you want Opportunity Hunter to find.",
+        }
+
+    if not HAS_GCP_CREDENTIALS:
+        return {
+            "status": "error",
+            "message": (
+                "Discovery needs Google Cloud credentials for Gemini and Google "
+                "Search (run `gcloud auth application-default login`). Your "
+                "watchlist, source rechecks and the demo work without them."
+            ),
         }
 
     user_id = "opportunity-hunter-demo"
@@ -149,17 +179,24 @@ async def run_hunter(payload: dict) -> dict:
 
     final_text = ""
 
-    async for event in runner.run_async(
-        user_id=user_id,
-        session_id=session.id,
-        new_message=message,
-    ):
-        content = getattr(event, "content", None)
-        if content and getattr(content, "role", None) == "model":
-            for part in getattr(content, "parts", []) or []:
-                part_text = getattr(part, "text", None)
-                if part_text:
-                    final_text = part_text
+    try:
+        async for event in runner.run_async(
+            user_id=user_id,
+            session_id=session.id,
+            new_message=message,
+        ):
+            content = getattr(event, "content", None)
+            if content and getattr(content, "role", None) == "model":
+                for part in getattr(content, "parts", []) or []:
+                    part_text = getattr(part, "text", None)
+                    if part_text:
+                        final_text = part_text
+    except Exception as exc:
+        logger.log_struct({"hunt_error": repr(exc)}, severity="ERROR")
+        return {
+            "status": "error",
+            "message": f"The Hunt could not finish: {type(exc).__name__}. Try again in a moment.",
+        }
 
     return {
         "status": "success",

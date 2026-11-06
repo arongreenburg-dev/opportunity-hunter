@@ -1,0 +1,32 @@
+{
+  "_note": "DEMO DATA. Fictional listings used to demonstrate source rechecks offline. Version 1 is the state when the decision was saved; version 2 is what the official source shows later.",
+  "listings": [
+    {
+      "slug": "northstar",
+      "title": "Northstar Health AI Challenge",
+      "organization": "Northstar Health Foundation",
+      "decision": "pass",
+      "reason": "The final round requires in-person travel to Boston, and I can't travel in March.",
+      "scenario": "Rule change that reopens a Pass: remote participation is now allowed.",
+      "versions": {"1": {"file": "northstar.v1.html"}, "2": {"file": "northstar.v2.html"}}
+    },
+    {
+      "slug": "civic",
+      "title": "Civic Data Fellowship 2027",
+      "organization": "Public Interest Data Collaborative",
+      "decision": "watch",
+      "reason": "Waiting for the stipend amount to be announced before committing time.",
+      "scenario": "Cosmetic copy edit: deadline and eligibility reworded, nothing material changed.",
+      "versions": {"1": {"file": "civic.v1.html"}, "2": {"file": "civic.v2.html"}}
+    },
+    {
+      "slug": "openclimate",
+      "title": "Open Climate Data Grant",
+      "organization": "Open Climate Fund",
+      "decision": "pursue",
+      "reason": "Strong fit with my data background; remote, and the April deadline is workable.",
+      "scenario": "Source failure: the official page returns HTTP 503 on recheck.",
+      "versions": {"1": {"file": "openclimate.v1.html"}, "2": {"http_status": 503}}
+    }
+  ]
+}

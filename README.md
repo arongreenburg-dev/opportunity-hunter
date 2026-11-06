@@ -113,6 +113,56 @@ The public product includes:
 - Copy Results,
 - Export CSV.
 
+## Decision Tracking: “What changed since I last looked?”
+
+A one-off AI search answers *what exists today*. Opportunity Hunter now also answers **what changed since I last looked, and does it change what I should do?**
+
+1. **Save a decision.** From any Hunt result (or manually), record **Pursue / Watch / Pass**, a short reason, the official source URL and an optional evidence note. The current deadline, eligibility, participation format and submission requirements are captured from the official page as the baseline.
+2. **Check for updates.** Rechecks the official source and compares it with the **last successful check** — field by field, prioritizing deadlines, eligibility, participation format and submission requirements.
+3. **Review what matters.** Each result gets one status:
+
+| Status | Meaning | In review queue? |
+|---|---|---|
+| **Reconsider** | A material change touches the reason you saved (e.g. you passed because travel was required; rules now allow remote) | Yes, first |
+| **Changed** | A material change not tied to your reason, or one that makes a Pursue harder | Yes |
+| **Couldn't verify** | Retrieval failed or evidence is ambiguous (wrong page, key terms vanished). Last verified evidence and your decision are preserved | Yes |
+| **Wording only** | Copy edits with the same dates, obligations and format | No |
+| **No change** | Matches the last verified evidence | No |
+
+Opening a change shows before/after wording side by side, the source link, and an explanation tied to your saved reason. Your decision only changes when you confirm it.
+
+The comparison engine (`app/recheck.py`) is deterministic and needs no API keys; the demo and live paths run through the same code.
+
+### Run locally (no cloud credentials needed for tracking and the demo)
+
+```bash
+uv sync
+OH_STORAGE=local uv run uvicorn app.fast_api_app:app --port 8000
+```
+
+Open http://localhost:8000/hunter. Discovery (Gemini + Google Search) still needs `gcloud auth application-default login`; without credentials the Discover tab explains this and the rest of the app works.
+
+Storage: `OH_STORAGE=firestore` uses the project's Cloud Firestore (`tracked_opportunities` collection with a `checks` subcollection); `local` writes `.oh_state/tracker.json`; the default `auto` picks Firestore when credentials exist.
+
+### 60-second demo (clearly labeled demo data)
+
+On an empty Review screen, click **Run the 60-second demo**, then **Publish version 2 of the sources**, then **Check all for updates**. Three fictional listings (`data/demo/`) show:
+
+- **Northstar Health AI Challenge** (Pass: “requires in-person travel”) → v2 allows remote → **Reconsider**, with before/after wording; confirm **Change to Pursue**.
+- **Civic Data Fellowship** (Watch) → v2 rewords deadline and eligibility only → **Wording only**, stays out of the queue.
+- **Open Climate Data Grant** (Pursue) → v2 source returns HTTP 503 → **Couldn't verify**; last verified evidence and the Pursue decision are kept.
+
+Refresh the page: decisions, checks and history persist. See `docs/demo-60s.md` for a narrated script.
+
+### Tests
+
+```bash
+uv run pytest tests/unit                       # engine, workflow, persistence, HTTP path, API
+OH_LIVE_URL=https://www.nsf.gov/funding/opportunities/reu-research-experiences-undergraduates \
+OH_LIVE_TITLE="Research Experiences for Undergraduates (REU)" \
+uv run pytest tests/integration/test_live_source.py   # opt-in live official listing
+```
+
 ## Architecture
 
 ```mermaid
@@ -212,6 +262,10 @@ The application is publicly deployed, reproducible, and intentionally scoped as 
 - `app/fast_api_app.py` — FastAPI / ADK backend
 - `app/hunter_ui.html` — web interface
 - `app/memory_store.py` — Firestore persistence and change detection
+- `app/recheck.py` — evidence extraction, comparison and decision-impact rules
+- `app/tracker.py`, `app/tracker_store.py`, `app/tracker_api.py` — decisions, source checks, review queue, storage, routes
+- `app/sources.py` — official-source retrieval (live HTTP or demo fixtures)
+- `data/demo/` — demo fixtures (two versions of three fictional listings)
 - `data/` — profile and state schemas
 - `docs/architecture.md` — architecture diagram
 - `tests/` — test scaffold
@@ -281,7 +335,7 @@ https://opportunity-hunter-107621546882.us-central1.run.app/hunter
 The current MVP intentionally does not include:
 
 - authentication / multi-user accounts,
-- automated recurring execution,
+- automated recurring execution (source rechecks are on demand; no background scheduler yet),
 - direct Google Sheets synchronization,
 - email / Slack / calendar notifications,
 - payments,
