@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import threading
 import uuid
 from datetime import UTC, date, datetime
 
@@ -13,6 +14,12 @@ PRIORITY = {
     recheck.VERDICT_REVIEW: 2,
     recheck.VERDICT_UNVERIFIED: 1,
 }
+
+
+# Serializes read-modify-write of tracked records within this process so a
+# source check that finishes late cannot overwrite a decision edited while its
+# page was being fetched. (Fetching happens outside the lock.)
+_WRITE_LOCK = threading.RLock()
 
 
 class TrackerError(ValueError):
@@ -71,8 +78,28 @@ class Tracker:
                 "Add a short reason so future changes can be checked against it."
             )
 
+        source_url = (source_url or "").strip()
+        if source_url and not sources.is_demo_url(source_url):
+            try:
+                sources.check_public_url(source_url)
+            except sources.SourceError as exc:
+                raise TrackerError(str(exc)) from exc
+
         now = _now()
         opp_id = _opp_id(title, source_url)
+        with _WRITE_LOCK:
+            record = self._save_tracked(
+                opp_id, now, title, organization, source_url, evidence_note, is_demo
+            )
+            self._apply_decision(record, decision, reason.strip(), via="saved")
+            self.store.put_opportunity(record)
+        if check_now and record["source_url"] and not record.get("evidence"):
+            return self.check(opp_id)
+        return record
+
+    def _save_tracked(
+        self, opp_id, now, title, organization, source_url, evidence_note, is_demo
+    ) -> dict:
         existing = self.store.get_opportunity(opp_id)
         record = existing or {
             "id": opp_id,
@@ -84,14 +111,10 @@ class Tracker:
         }
         record["title"] = title
         record["organization"] = (organization or "").strip()
-        record["source_url"] = (source_url or "").strip()
+        record["source_url"] = source_url
         record["evidence_note"] = (evidence_note or "").strip()
         record["is_demo"] = is_demo
         record["updated_at"] = now
-        self._apply_decision(record, decision, reason.strip(), via="saved")
-        self.store.put_opportunity(record)
-        if check_now and record["source_url"] and not record.get("evidence"):
-            return self.check(opp_id)
         return record
 
     def _apply_decision(
@@ -107,32 +130,45 @@ class Tracker:
             raise TrackerError("Choose Pursue, Watch or Pass.")
         if not (reason or "").strip():
             raise TrackerError("Add a short reason for the decision.")
-        record = self._get(opp_id)
-        self._apply_decision(record, decision, reason.strip(), via="edited")
-        record["updated_at"] = _now()
-        self.store.put_opportunity(record)
+        with _WRITE_LOCK:
+            record = self._get(opp_id)
+            self._apply_decision(record, decision, reason.strip(), via="edited")
+            record["updated_at"] = _now()
+            self.store.put_opportunity(record)
         return record
 
     def remove(self, opp_id: str) -> None:
-        self.store.delete_opportunity(opp_id)
+        with _WRITE_LOCK:
+            self.store.delete_opportunity(opp_id)
 
     # -- source rechecks ----------------------------------------------------
     def check(self, opp_id: str) -> dict:
-        record = self._get(opp_id)
+        source_url = self._get(opp_id)["source_url"]
         checked_at = _now()
-        baseline = (record.get("evidence") or {}).get("fields")
         current = None
         page_title = ""
         error = None
         try:
-            result = sources.fetch(
-                record["source_url"], demo_version=self.demo_version()
-            )
+            result = sources.fetch(source_url, demo_version=self.demo_version())
             page_title, text = recheck.html_to_text(result.html)
             current = recheck.extract_evidence(text)
         except sources.SourceError as exc:
             error = str(exc)
 
+        # Evaluate and save against the latest record, not the one read before
+        # the (slow) fetch, so concurrent decision edits are never lost.
+        with _WRITE_LOCK:
+            return self._record_check(
+                opp_id, source_url, checked_at, current, page_title, error
+            )
+
+    def _record_check(
+        self, opp_id, source_url, checked_at, current, page_title, error
+    ) -> dict:
+        record = self._get(opp_id)
+        if record["source_url"] != source_url:
+            raise TrackerError("The source URL changed during the check. Try again.")
+        baseline = (record.get("evidence") or {}).get("fields")
         decision = record["decision"]
         verdict = recheck.evaluate_check(
             baseline=baseline,
@@ -181,7 +217,14 @@ class Tracker:
         )
         if verdict["verdict"] in recheck.ATTENTION_VERDICTS:
             new_priority = PRIORITY[verdict["verdict"]]
-            if not open_review or new_priority >= PRIORITY.get(
+            has_pending_changes = open_review and open_review["verdict"] != (
+                recheck.VERDICT_UNVERIFIED
+            )
+            if has_pending_changes and verdict["verdict"] != recheck.VERDICT_UNVERIFIED:
+                # Another material change before the last one was reviewed:
+                # accumulate, so nothing unacknowledged drops out of view.
+                self._merge_review(open_review, verdict, check["id"], checked_at)
+            elif not open_review or new_priority >= PRIORITY.get(
                 open_review["verdict"], 0
             ):
                 record["review"] = {
@@ -214,6 +257,63 @@ class Tracker:
         self.store.put_opportunity(record)
         return record
 
+    @staticmethod
+    def _merge_review(review: dict, verdict: dict, check_id: str, checked_at: str):
+        """Fold a newer check's changes into an unresolved review.
+
+        Each field keeps the wording from when the review opened as "before"
+        and takes the newest wording as "after"; a field that changed back to
+        its original wording drops out.
+        """
+        by_field = {c["field"]: c for c in review.get("changes") or []}
+        for new in verdict["changes"]:
+            old = by_field.get(new["field"])
+            before = old["before"] if old else new["before"]
+            after = new["after"]
+            if not before and not after:
+                by_field.pop(new["field"], None)
+                continue
+            if not after:
+                merged = recheck.FieldChange(
+                    new["field"],
+                    "removed",
+                    before,
+                    "",
+                    "No longer stated on the source page.",
+                )
+            elif not before:
+                merged = recheck.FieldChange(
+                    new["field"], "added", "", after, "Newly stated on the source page."
+                )
+            else:
+                merged = recheck.classify_field_change(new["field"], before, after)
+            if merged is None:
+                by_field.pop(new["field"], None)
+            else:
+                by_field[new["field"]] = merged.to_dict()
+        order = [f for f, _ in recheck.FIELDS]
+        review["changes"] = sorted(
+            by_field.values(), key=lambda c: order.index(c["field"])
+        )
+        review["related_fields"] = sorted(
+            set(review.get("related_fields") or [])
+            | set(verdict.get("related_fields") or []),
+            key=order.index,
+        )
+        if PRIORITY[verdict["verdict"]] >= PRIORITY[review["verdict"]]:
+            review.update(
+                {
+                    "verdict": verdict["verdict"],
+                    "headline": verdict["headline"],
+                    "explanation": verdict["explanation"],
+                    "suggested_decision": verdict.get("suggested_decision")
+                    or review.get("suggested_decision"),
+                }
+            )
+        review["check_id"] = check_id
+        review["updated_at"] = checked_at
+        review["check_ids"] = [*review.get("check_ids", []), check_id]
+
     def check_all(self) -> list[dict]:
         return [
             self.check(r["id"])
@@ -222,6 +322,12 @@ class Tracker:
         ]
 
     def resolve_review(
+        self, opp_id: str, action: str, decision: str | None = None, note: str = ""
+    ) -> dict:
+        with _WRITE_LOCK:
+            return self._resolve_review(opp_id, action, decision, note)
+
+    def _resolve_review(
         self, opp_id: str, action: str, decision: str | None = None, note: str = ""
     ) -> dict:
         record = self._get(opp_id)

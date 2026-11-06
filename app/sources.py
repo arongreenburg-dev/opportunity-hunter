@@ -7,10 +7,14 @@ HTML then goes through exactly the same extraction and comparison pipeline.
 
 from __future__ import annotations
 
+import ipaddress
 import json
+import os
+import socket
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 
@@ -18,6 +22,8 @@ DEMO_DIR = Path(__file__).resolve().parent.parent / "data" / "demo"
 DEMO_PREFIX = "/hunter/demo/listings/"
 USER_AGENT = "OpportunityHunter/0.2 (official-source recheck)"
 MAX_BYTES = 3_000_000
+MAX_REDIRECTS = 5
+_INTERNAL_SUFFIXES = (".internal", ".local", ".localhost", ".lan", ".home.arpa")
 
 
 class SourceError(Exception):
@@ -57,6 +63,53 @@ def is_demo_url(url: str) -> bool:
     return (url or "").startswith(DEMO_PREFIX)
 
 
+def _proxy_configured(scheme: str) -> bool:
+    names = (f"{scheme}_proxy", f"{scheme.upper()}_PROXY", "all_proxy", "ALL_PROXY")
+    return any(os.getenv(n) for n in names)
+
+
+def check_public_url(url: str) -> None:
+    """Reject URLs that would make the server reach a non-public destination.
+
+    Source URLs are user-supplied, so without this the recheck would be a
+    server-side request forgery primitive (loopback, private networks, cloud
+    metadata). Every address a hostname resolves to must be globally routable.
+    Set OH_ALLOW_PRIVATE_SOURCES=1 only for local testing.
+    """
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise SourceError("Only public http(s) web pages can be checked.")
+    if os.getenv("OH_ALLOW_PRIVATE_SOURCES") == "1":
+        return
+    host = parts.hostname.rstrip(".").lower()
+    blocked = SourceError("Only public web addresses can be checked.")
+    if host in ("localhost", "metadata", "metadata.google.internal") or host.endswith(
+        _INTERNAL_SUFFIXES
+    ):
+        raise blocked
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        literal = None
+    if literal is not None:
+        addresses = [literal]
+    else:
+        try:
+            infos = socket.getaddrinfo(host, parts.port or 443, type=socket.SOCK_STREAM)
+        except (socket.gaierror, UnicodeError) as exc:
+            # Behind an explicit egress proxy the proxy resolves names and
+            # enforces its own network policy; otherwise unresolvable is a
+            # failure.
+            if _proxy_configured(parts.scheme):
+                return
+            raise SourceError("The official page's host could not be found.") from exc
+        addresses = [ipaddress.ip_address(info[4][0].split("%")[0]) for info in infos]
+    for ip in addresses:
+        mapped = getattr(ip, "ipv4_mapped", None)
+        if not ip.is_global or (mapped is not None and not mapped.is_global):
+            raise blocked
+
+
 def fetch(url: str, *, demo_version: int = 1, timeout: float = 15.0) -> FetchResult:
     """Fetch an official source page. Raises SourceError on any failure."""
     if is_demo_url(url):
@@ -67,14 +120,22 @@ def fetch(url: str, *, demo_version: int = 1, timeout: float = 15.0) -> FetchRes
 
     try:
         with httpx.Client(
-            follow_redirects=True,
+            follow_redirects=False,
             timeout=timeout,
             headers={
                 "User-Agent": USER_AGENT,
                 "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
             },
         ) as client:
-            response = client.get(url)
+            # Follow redirects by hand so every hop is validated.
+            for _hop in range(MAX_REDIRECTS + 1):
+                check_public_url(url)
+                response = client.get(url)
+                if not response.is_redirect:
+                    break
+                url = urljoin(url, response.headers.get("location", ""))
+            else:
+                raise SourceError("The official page redirected too many times.")
     except httpx.TimeoutException as exc:
         raise SourceError("The official page timed out.") from exc
     except httpx.HTTPError as exc:

@@ -13,7 +13,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app import recheck, tracker_store
+from app import recheck, sources, tracker_store
 from app.tracker import Tracker, TrackerError
 from app.tracker_store import LocalJsonStore
 
@@ -126,8 +126,14 @@ def test_track_without_url_saves_decision_only(t):
 
 class _Pages(BaseHTTPRequestHandler):
     pages: ClassVar[dict] = {}
+    redirects: ClassVar[dict] = {}
 
     def do_GET(self):
+        if self.path in self.redirects:
+            self.send_response(302)
+            self.send_header("Location", self.redirects[self.path])
+            self.end_headers()
+            return
         status, body = self.pages.get(self.path, (404, "not found"))
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -143,6 +149,7 @@ def http_source(monkeypatch):
     """A real HTTP server whose pages can change between checks."""
     for var in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY"):
         monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("OH_ALLOW_PRIVATE_SOURCES", "1")  # loopback test server
     server = HTTPServer(("127.0.0.1", 0), _Pages)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{server.server_port}", _Pages.pages
@@ -203,3 +210,103 @@ def test_api_routes(tmp_path, monkeypatch):
         assert client.delete("/hunter/api/demo").json()["opportunities"] == []
     finally:
         tracker_store.get_store.cache_clear()
+
+
+# --- Review findings: SSRF, concurrent edits, accumulated changes ---------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1:8080/admin",
+        "http://169.254.169.254/computeMetadata/v1/",
+        "http://10.0.0.5/",
+        "http://[::1]/",
+        "http://[::ffff:127.0.0.1]/",
+        "http://localhost/",
+        "http://metadata.google.internal/",
+        "ftp://example.com/rules",
+    ],
+)
+def test_non_public_sources_are_rejected(t, url, monkeypatch):
+    monkeypatch.delenv("OH_ALLOW_PRIVATE_SOURCES", raising=False)
+    with pytest.raises(TrackerError, match="public"):
+        t.track(title="X", source_url=url, decision="watch", reason="r")
+    with pytest.raises(sources.SourceError):
+        sources.fetch(url)
+
+
+def test_redirect_to_private_address_is_blocked(http_source, monkeypatch):
+    base, _pages = http_source
+    monkeypatch.delenv("OH_ALLOW_PRIVATE_SOURCES", raising=False)
+    real_check = sources.check_public_url
+
+    def allow_loopback_server(url):
+        if url.startswith(base):
+            return
+        real_check(url)
+
+    monkeypatch.setattr(sources, "check_public_url", allow_loopback_server)
+    _Pages.redirects = {"/hop": "http://169.254.169.254/latest/meta-data/"}
+    try:
+        with pytest.raises(sources.SourceError, match="public"):
+            sources.fetch(base + "/hop")
+    finally:
+        _Pages.redirects = {}
+
+
+def test_check_does_not_overwrite_decision_edited_during_fetch(t, monkeypatch):
+    o = t.track(title="Board seat", decision="pursue", reason="Fits", check_now=False)
+    record = t.store.get_opportunity(o["id"])
+    record["source_url"] = "https://example.org/rules"
+    t.store.put_opportunity(record)
+    page = (DEMO / "civic.v1.html").read_text()
+
+    def slow_fetch(url, **kwargs):
+        # The user changes their mind while the page is being fetched.
+        t.set_decision(o["id"], "pass", "No longer interested")
+        return sources.FetchResult(url, 200, page)
+
+    monkeypatch.setattr(sources, "fetch", slow_fetch)
+    after = t.check(o["id"])
+    assert after["decision"]["value"] == "pass"
+    assert [d["value"] for d in after["decision_history"]] == ["pursue", "pass"]
+    assert after["last_check"]["outcome"] == "verified"
+    assert t.store.get_opportunity(o["id"])["decision"]["value"] == "pass"
+
+
+def test_unreviewed_changes_accumulate_across_checks(t, monkeypatch):
+    def page(eligibility, deadline):
+        return (
+            "<title>Fellowship</title><h2>Key Dates</h2><p>Applications close "
+            f"{deadline}.</p><h2>Eligibility</h2><p>{eligibility}</p>"
+        )
+
+    current = {"html": page("Open to US residents.", "March 1, 2027")}
+    monkeypatch.setattr(
+        sources,
+        "fetch",
+        lambda url, **k: sources.FetchResult(url, 200, current["html"]),
+    )
+    o = t.track(
+        title="Fellowship",
+        source_url="https://example.org/f",
+        decision="watch",
+        reason="Waiting on stipend",
+    )
+    current["html"] = page("Open to residents of Canada.", "March 1, 2027")
+    t.check(o["id"])
+    current["html"] = page("Open to residents of Canada.", "March 20, 2027")
+    review = t.check(o["id"])["review"]
+    assert review["open"]
+    fields = {c["field"]: c for c in review["changes"]}
+    assert set(fields) == {"deadline", "eligibility"}
+    # "before" is the wording from when the review opened.
+    assert "US residents" in fields["eligibility"]["before"]
+    assert "March 1, 2027" in fields["deadline"]["before"]
+    assert len(review["check_ids"]) == 1  # second check folded in
+
+    # A field that reverts drops out of the pending review.
+    current["html"] = page("Open to US residents.", "March 20, 2027")
+    review = t.check(o["id"])["review"]
+    assert {c["field"] for c in review["changes"]} == {"deadline"}

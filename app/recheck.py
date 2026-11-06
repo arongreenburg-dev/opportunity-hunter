@@ -106,6 +106,13 @@ _STRENGTH_WORDS = {
     "except",
     "unless",
     "longer",
+    # Conjunctions change obligations: "a proposal and a video" vs "or".
+    "and",
+    "or",
+    "either",
+    "both",
+    "neither",
+    "nor",
 }
 
 # Words that routinely come and go in copy edits without changing meaning.
@@ -131,8 +138,6 @@ _FILLER_WORDS = {
     "on",
     "in",
     "at",
-    "and",
-    "or",
     "is",
     "are",
     "be",

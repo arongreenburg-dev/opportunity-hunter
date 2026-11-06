@@ -112,6 +112,16 @@ def test_material_changes_detected():
         ("eligibility", "Open to US residents.", "Open to residents of Canada."),
         ("submission", "A demo video is optional.", "A demo video is required."),
         ("submission", "Budget up to $25,000.", "Budget up to $10,000."),
+        (
+            "submission",
+            "Submit a proposal and a video.",
+            "Submit a proposal or a video.",
+        ),
+        (
+            "eligibility",
+            "Open to students and residents.",
+            "Open to students or residents.",
+        ),
     ]
     for field, before, after in cases:
         change = recheck.classify_field_change(field, before, after)
