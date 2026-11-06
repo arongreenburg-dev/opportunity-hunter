@@ -1,9 +1,8 @@
-from datetime import datetime, timezone
 import hashlib
 import json
+from datetime import UTC, datetime
 
 from google.cloud import firestore
-
 
 PROJECT_ID = "opportunity-hunter-506704"
 
@@ -18,7 +17,7 @@ def save_profile(profile_id: str, profile: dict) -> dict:
     record = {
         **profile,
         "profile_id": profile_id,
-        "updated_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(UTC),
     }
 
     db.collection("profiles").document(profile_id).set(record)
@@ -64,9 +63,7 @@ def _opportunity_fingerprint(opportunity: dict) -> str:
         "location": opportunity.get("location", ""),
         "remote_option": opportunity.get("remote_option", ""),
         "financial_upside": opportunity.get("financial_upside", ""),
-        "estimated_time_commitment": opportunity.get(
-            "estimated_time_commitment", ""
-        ),
+        "estimated_time_commitment": opportunity.get("estimated_time_commitment", ""),
         "requirements": opportunity.get("requirements", []),
         "current_status": opportunity.get("current_status", ""),
         "source_url": opportunity.get("source_url", ""),
@@ -98,7 +95,7 @@ def save_opportunity_evaluation(
 
     db = get_db()
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     doc_id = _opportunity_doc_id(candidate_id)
     fingerprint = _opportunity_fingerprint(opportunity)
 
@@ -153,7 +150,7 @@ def save_opportunity_evaluation(
 def save_hunt(hunt_id: str, hunt: dict) -> dict:
     """Create or update a saved Opportunity Hunter Hunt."""
     db = get_db()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     ref = db.collection("hunts").document(hunt_id)
     existing = ref.get()

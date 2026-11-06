@@ -210,3 +210,6 @@ credentials*.json
 
 # Local backup files
 *.bak
+
+# Local decision tracker state (OH_STORAGE=local)
+.oh_state/
